@@ -20,7 +20,8 @@
       "WebSearch",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:github.com)",
-      "mcp__playwright__*"
+      "mcp__playwright__*",
+      "Bash(git:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",

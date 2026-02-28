@@ -1,38 +1,50 @@
-# Project Template
+# create-claude-project
 
-An opinionated project template for running Claude Code in a sandboxed Apple container with browser control.
+Scaffold a Claude Code project with Apple container sandboxing and Chrome browser control.
 
-## What's Included
+```bash
+npx create-claude-project my-app
+```
 
-- **Apple Container setup** — Dockerfile + launch script for running Claude Code in an isolated VM via [Apple Virtualization Framework](https://github.com/apple/container)
-- **Chrome forwarding** — CDP proxy so Claude can control a Chrome browser on the host from inside the container
-- **Claude configuration** — Pre-configured permissions, MCP servers, and project instructions
+Or equivalently:
+
+```bash
+npm init claude-project my-app
+```
+
+## What You Get
+
+```
+my-app/
+├── .claude/settings.local.json   # Permissions (safe git ops, deny force push)
+├── .mcp.json                     # Playwright MCP → Chrome CDP proxy
+├── CLAUDE.md                     # Project instructions for Claude
+├── Dockerfile                    # Apple container image
+├── start.sh                      # Launch Claude Code in the container
+└── scripts/
+    └── launch-chrome-debug.sh    # Chrome + CDP proxy on the host
+```
+
+## Prerequisites
+
+- macOS with Apple Silicon
+- [Apple Container](https://github.com/apple/container) installed
+- Node.js (for `npx` and the Chrome CDP proxy)
 
 ## Quick Start
 
-### 1. Install Apple Container
-
-Download from [GitHub releases](https://github.com/apple/container/releases), then:
-
 ```bash
-container system start
-```
+# Scaffold
+npx create-claude-project my-app
+cd my-app
 
-### 2. Build the container image
-
-```bash
+# Build the container image
 container build -t claude-sandbox .
-```
 
-### 3. Start Chrome with remote debugging (optional, for browser control)
-
-```bash
+# (Optional) Start Chrome with remote debugging for browser control
 ./scripts/launch-chrome-debug.sh
-```
 
-### 4. Launch Claude Code
-
-```bash
+# Launch Claude Code
 export ANTHROPIC_API_KEY="sk-ant-..."
 ./start.sh
 ```
@@ -56,12 +68,6 @@ The Chrome forwarding setup lets Claude automate a browser through Playwright MC
 2. A Node.js proxy on port 9223 bridges the container-to-host network gap by rewriting Host headers (Chrome rejects non-localhost connections)
 3. Playwright MCP inside the container connects to `host.docker.internal:9223`
 
-### Claude Configuration
-
-- **CLAUDE.md** — Project-level instructions for Claude
-- **.claude/settings.local.json** — Allowed/denied permissions (safe git ops, no force push, no `browser_install`)
-- **.mcp.json** — Playwright MCP server pointing at the CDP proxy
-
 ## Customizing
 
 1. Edit `CLAUDE.md` with your project-specific instructions
@@ -69,3 +75,7 @@ The Chrome forwarding setup lets Claude automate a browser through Playwright MC
 3. Add more MCP servers to `.mcp.json`
 4. Adjust CPU/memory in `start.sh`
 5. Add project dependencies to the `Dockerfile`
+
+## License
+
+MIT

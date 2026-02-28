@@ -1,0 +1,23 @@
+{
+  "name": "create-claude-project",
+  "version": "0.1.0",
+  "description": "Scaffold a Claude Code project with Apple container sandboxing and Chrome forwarding",
+  "type": "module",
+  "bin": {
+    "create-claude-project": "bin/create.mjs"
+  },
+  "files": [
+    "bin/",
+    "template/"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "scaffold",
+    "template",
+    "apple-container",
+    "sandbox"
+  ],
+  "author": "schmidsi",
+  "license": "MIT"
+}
