@@ -1,15 +1,15 @@
-# create-claude-project
+# Claude in an Apple
 
 Scaffold a Claude Code project with Apple container sandboxing and Chrome browser control.
 
 ```bash
-npx create-claude-project my-app
+npx create-claude-in-an-apple my-app
 ```
 
 Or equivalently:
 
 ```bash
-npm init claude-project my-app
+npm init claude-in-an-apple my-app
 ```
 
 ## What You Get
@@ -35,7 +35,7 @@ my-app/
 
 ```bash
 # Scaffold
-npx create-claude-project my-app
+npx create-claude-in-an-apple my-app
 cd my-app
 
 # Build the container image

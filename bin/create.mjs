@@ -11,7 +11,7 @@ const templateDir = join(__dirname, "..", "template");
 const name = process.argv[2];
 
 if (!name) {
-  console.error("Usage: npm init claude-project <project-name>");
+  console.error("Usage: npm init claude-in-an-apple <project-name>");
   process.exit(1);
 }
 
