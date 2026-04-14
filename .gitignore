@@ -4,3 +4,8 @@
 node_modules/
 .DS_Store
 *.log
+
+# >>> akf >>>
+.akf/
+dist/akf
+# <<< akf <<<

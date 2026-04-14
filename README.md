@@ -1,80 +1,60 @@
-# Claude in an Apple
+# apfelkäfig
 
-Scaffold a Claude Code project with Apple container sandboxing and Chrome browser control.
+Disposable dev sandboxes on Apple Silicon, safe to point coding agents at.
 
-```bash
-npx create-claude-in-an-apple my-app
-```
+`akf init` drops a one-command Apple-`container` sandbox into any existing project folder — build
+the image, launch Claude Code inside the micro-VM, and stop babysitting permission prompts. **The VM
+is the sandbox**, so Claude runs with `--dangerously-skip-permissions` without risk to the host.
 
-Or equivalently:
+Status: pre-release (v0.1 MVP).
 
-```bash
-npm init claude-in-an-apple my-app
-```
+## Install
 
-## What You Get
-
-```
-my-app/
-├── .claude/settings.local.json   # Permissions (safe git ops, deny force push)
-├── .mcp.json                     # Playwright MCP → Chrome CDP proxy
-├── CLAUDE.md                     # Project instructions for Claude
-├── Dockerfile                    # Apple container image
-├── start.sh                      # Launch Claude Code in the container
-└── scripts/
-    └── launch-chrome-debug.sh    # Chrome + CDP proxy on the host
-```
-
-## Prerequisites
-
-- macOS with Apple Silicon
-- [Apple Container](https://github.com/apple/container) installed
-- Node.js (for `npx` and the Chrome CDP proxy)
-
-## Quick Start
+Not packaged yet. For now:
 
 ```bash
-# Scaffold
-npx create-claude-in-an-apple my-app
-cd my-app
-
-# Build the container image
-container build -t claude-sandbox .
-
-# (Optional) Start Chrome with remote debugging for browser control
-./scripts/launch-chrome-debug.sh
-
-# Launch Claude Code
-export ANTHROPIC_API_KEY="sk-ant-..."
-./start.sh
+git clone https://github.com/ApfelKaefig/apfelkaefig
+cd apfelkaefig
+deno task compile
+cp dist/akf /usr/local/bin/akf
 ```
 
-## How It Works
+## Use
 
-### Sandboxing
+```bash
+cd ~/code/my-project
+akf init      # augments the folder (non-destructive; idempotent)
+./build.sh    # build the sandbox image (one-time)
+./start.sh    # launch Claude Code inside the sandbox
+```
 
-The Apple container runs a lightweight Linux VM with:
-- 2 CPUs, 4GB RAM
-- Your project mounted at `/workspace`
-- Claude config mounted from `~/.claude`
-- Read-only access to `~/Downloads`
-- Claude Code runs with `--dangerously-skip-permissions` (safe because the VM is the sandbox)
+`akf init` adds:
 
-### Browser Control
+- `.devcontainer/Dockerfile` + `devcontainer.json` — image definition, also picked up by VSCode Dev
+  Containers.
+- `start.sh` — launches Apple `container` with your folder mounted at `/workspace`, `$HOME/.claude`
+  mounted read-write, `$HOME/Downloads` read-only.
+- `build.sh` — builds with Docker and shuttles the image through a local registry (workaround for
+  Apple-`container` v0.9 build-time networking).
+- Appends a marker-delimited block to `.gitignore` and `CLAUDE.md`.
 
-The Chrome forwarding setup lets Claude automate a browser through Playwright MCP:
+Re-running `akf init` is a no-op.
 
-1. `launch-chrome-debug.sh` starts Chrome with `--remote-debugging-port=9222` on localhost
-2. A Node.js proxy on port 9223 bridges the container-to-host network gap by rewriting Host headers (Chrome rejects non-localhost connections)
-3. Playwright MCP inside the container connects to `host.docker.internal:9223`
+## Requirements
 
-## Customizing
+- macOS on Apple Silicon
+- [Apple `container`](https://github.com/apple/container) (tested on v0.9)
+- Docker (only for `build.sh`, until Apple fixes the builder's DNS bug)
 
-1. Edit `CLAUDE.md` with your project-specific instructions
-2. Add/remove permissions in `.claude/settings.local.json`
-3. Add more MCP servers to `.mcp.json`
-4. Adjust CPU/memory in `start.sh`
-5. Add project dependencies to the `Dockerfile`
+## Develop
+
+```bash
+deno task test     # unit tests for fs helpers
+deno task dev init # run from source in the current folder
+deno task compile  # build ./dist/akf
+```
+
+See `POSITIONING.md`, `ARCHITECTURE_EXPLORATION.md`, and `tasks/` for the design thinking.
 
 ## License
 

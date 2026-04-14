@@ -3,7 +3,7 @@
 #
 # Prerequisites:
 #   - Install Apple Container: https://github.com/apple/container
-#   - Build the image first: container build -t claude-sandbox .
+#   - Build the image first:   ./build.sh
 #
 # Usage:
 #   ./start.sh                # interactive Claude Code session
@@ -12,7 +12,6 @@
 set -e
 WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
 
-# Ensure the container service is running
 if ! container system status &>/dev/null; then
   container system start
 fi
@@ -23,6 +22,7 @@ exec container run -it --rm \
   -v "$HOME/.claude:/home/node/.claude" \
   --mount "type=bind,source=$HOME/Downloads,target=/home/node/Downloads,readonly" \
   -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+  -e CLAUDE_CONFIG_DIR=/home/node/.claude \
   -u node -w /workspace \
   claude-sandbox \
   claude --dangerously-skip-permissions "$@"
