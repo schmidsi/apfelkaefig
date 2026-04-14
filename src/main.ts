@@ -1,5 +1,6 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { runInit } from "./commands/init.ts";
+import denoJson from "../deno.json" with { type: "json" };
 
 const USAGE = `akf — dev sandboxes on Apple container
 
@@ -9,7 +10,7 @@ Usage:
   akf --version       Show version.
 `;
 
-const VERSION = "0.1.0";
+const VERSION = denoJson.version;
 
 async function main(argv: string[]): Promise<number> {
   const flags = parseArgs(argv, {

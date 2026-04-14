@@ -69,6 +69,34 @@ mounts are the workspace and `~/.claude`. That's what apfelkäfig sets up, using
 See [POSITIONING.md](POSITIONING.md) for the competitive landscape and
 [ARCHITECTURE_EXPLORATION.md](ARCHITECTURE_EXPLORATION.md) for the design notes.
 
+## Security model
+
+The VM is the trust boundary. Inside it, Claude runs with every permission prompt disabled —
+that's the point. You should understand exactly what the VM can reach before letting an agent
+loose in it.
+
+**The agent inside the sandbox can:**
+
+- Read and write everything in the project folder (mounted at `/workspace`).
+- Read and write your **entire `~/.claude` directory** — memories, MCP configs, login tokens,
+  other projects' settings. This is a deliberate trade-off (so the agent shares your login and
+  MCP setup with the host) but it means "sandboxed" does **not** mean "isolated from your Claude
+  account." If that bothers you, drop the `~/.claude` mount from `start.sh` and run `claude login`
+  inside the VM instead.
+- Reach the public internet on any port.
+
+**The agent cannot:**
+
+- Touch anything else on your host — including other project folders, your home directory, or
+  shell history.
+- Write to `~/Downloads` (read-only mount, so it can read files you drop in but not modify them).
+
+**Not covered:** secret exfiltration via network. Anything the agent can read inside the VM
+(including `~/.claude` contents) it can also send to the open internet. Sandboxing limits local
+blast radius, not data egress.
+
+Found a security issue? Open a GitHub issue or email the address in `git log`.
+
 ## Develop
 
 ```bash
