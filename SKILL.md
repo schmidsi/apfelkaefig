@@ -174,3 +174,7 @@ read-only.
 - Apple `container`'s networking is still rough in v0.9 — localhost port forwarding doesn't work on
   the Apple path. For browser-driven dev, see the `assets/chrome-bridge/` scripts in the apfelkäfig
   repo (CDP proxy on :9223).
+- For IDE integration (VS Code / Cursor, `/ide` in Claude Code, inline diffs), open the folder
+  and pick **Reopen in Container** — the `.devcontainer/` files above are all Dev Containers
+  needs. The editor server runs inside the VM, so `/ide` connects on loopback without any host
+  port forwarding. `./start.sh` remains the right path for pure terminal agent sessions.

@@ -52,6 +52,15 @@ akf init      # augments the folder (non-destructive; idempotent)
 
 Existing files are never overwritten. Re-running `akf init` is a no-op.
 
+## IDE integration (VS Code / Cursor)
+
+The `.devcontainer/` files that `akf init` drops in are also picked up by VS Code and Cursor's
+Dev Containers extension. For IDE-attached work — inline diffs, `/ide` in Claude Code, editor
+diagnostics — open the folder in VS Code or Cursor and choose **Reopen in Container**. The
+editor server runs inside the VM, so everything wires up on container-local loopback with no
+host-to-VM port forwarding needed. Use `./start.sh` for pure terminal agent sessions; use
+Reopen in Container when you want the editor in the loop.
+
 ## Requirements
 
 - macOS on Apple Silicon
