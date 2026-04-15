@@ -21,7 +21,6 @@ exec container run -it --rm \
   -v "$WORKSPACE:/workspace" \
   -v "$HOME/.claude:/home/node/.claude" \
   --mount "type=bind,source=$HOME/Downloads,target=/home/node/Downloads,readonly" \
-  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   -e CLAUDE_CONFIG_DIR=/home/node/.claude \
   -u node -w /workspace \
   claude-sandbox \
