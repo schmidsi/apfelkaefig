@@ -10,4 +10,4 @@ Launch:
 2. `./start.sh` — start Claude Code inside the sandbox.
 
 The sandbox mounts this folder at `/workspace`, `$HOME/.claude` read-write, and `$HOME/Downloads`
-read-only.
+and `$HOME/Desktop` read-only.
