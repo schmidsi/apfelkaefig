@@ -28,15 +28,23 @@ fi
 
 # --- Parse devcontainer.json ---
 
-# Resolve devcontainer variable syntax:
-#   ${localEnv:HOME}              -> $HOME
-#   ${localWorkspaceFolder}       -> $WORKSPACE
+# Resolve devcontainer variable syntax from stdin to stdout:
+#   ${localEnv:VARNAME}             -> value of $VARNAME on host (empty if unset)
+#   ${localWorkspaceFolder}         -> $WORKSPACE
 #   ${localWorkspaceFolderBasename} -> basename of $WORKSPACE
 resolve_vars() {
-  sed \
-    -e "s|\${localEnv:HOME}|$HOME|g" \
-    -e "s|\${localWorkspaceFolder}|$WORKSPACE|g" \
-    -e "s|\${localWorkspaceFolderBasename}|$(basename "$WORKSPACE")|g"
+  local ws_base line var_name var_value
+  ws_base=$(basename "$WORKSPACE")
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    while [[ "$line" =~ \$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\} ]]; do
+      var_name="${BASH_REMATCH[1]}"
+      var_value="${!var_name:-}"
+      line="${line//\$\{localEnv:$var_name\}/$var_value}"
+    done
+    line="${line//\$\{localWorkspaceFolder\}/$WORKSPACE}"
+    line="${line//\$\{localWorkspaceFolderBasename\}/$ws_base}"
+    printf '%s\n' "$line"
+  done
 }
 
 # Build mount flags from .mounts[] and .workspaceMount
@@ -68,12 +76,23 @@ while IFS= read -r mount; do
   mount_flags+=(-v "$src:$tgt$ro")
 done < <(jq -r '.mounts[]? // empty' "$DEVCONTAINER")
 
-# Build env flags from .containerEnv
+# Build env flags from .containerEnv (always-set) and .remoteEnv (forwarded from host).
+# remoteEnv values resolve via ${localEnv:VAR}; skip any whose host value is empty so we
+# don't clobber container-side defaults with empty strings.
 env_flags=()
+
 while IFS='=' read -r key value; do
-  value=$(echo "$value" | resolve_vars)
+  [[ -z "$key" ]] && continue
+  value=$(printf '%s' "$value" | resolve_vars)
   env_flags+=(-e "$key=$value")
 done < <(jq -r '.containerEnv // {} | to_entries[] | "\(.key)=\(.value)"' "$DEVCONTAINER")
+
+while IFS='=' read -r key value; do
+  [[ -z "$key" ]] && continue
+  value=$(printf '%s' "$value" | resolve_vars)
+  [[ -z "$value" ]] && continue
+  env_flags+=(-e "$key=$value")
+done < <(jq -r '.remoteEnv // {} | to_entries[] | "\(.key)=\(.value)"' "$DEVCONTAINER")
 
 # Remote user
 remote_user=$(jq -r '.remoteUser // "node"' "$DEVCONTAINER")

@@ -12,6 +12,9 @@
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/node/.claude"
   },
+  "remoteEnv": {
+    "OP_SERVICE_ACCOUNT_TOKEN": "${localEnv:OP_SERVICE_ACCOUNT_TOKEN}"
+  },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace"
 }

@@ -40,6 +40,13 @@ RUN ARCH=$(dpkg --print-architecture) && \
     curl -fsSL "https://github.com/cli/cli/releases/latest/download/gh_$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r '.tag_name' | sed 's/^v//')_linux_${ARCH}.tar.gz" \
     | tar xz --strip-components=1 -C /usr/local
 
+# Install 1Password CLI (op) for on-demand secret resolution. Harmless if unused.
+RUN ARCH=$(dpkg --print-architecture) && \
+    OP_VERSION=v2.30.3 && \
+    curl -sSfo /tmp/op.zip "https://cache.agilebits.com/dist/1P/op2/pkg/${OP_VERSION}/op_linux_${ARCH}_${OP_VERSION}.zip" && \
+    unzip -o /tmp/op.zip -d /usr/local/bin op && \
+    rm /tmp/op.zip && chmod +x /usr/local/bin/op
+
 # Non-root user
 RUN useradd -m -s /bin/bash node
 
@@ -68,6 +75,9 @@ WORKDIR /workspace
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/node/.claude"
   },
+  "remoteEnv": {
+    "OP_SERVICE_ACCOUNT_TOKEN": "${localEnv:OP_SERVICE_ACCOUNT_TOKEN}"
+  },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace"
 }
@@ -85,12 +95,16 @@ if ! container system status &>/dev/null; then
   container system start
 fi
 
+op_flags=()
+[[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && op_flags+=(-e "OP_SERVICE_ACCOUNT_TOKEN=$OP_SERVICE_ACCOUNT_TOKEN")
+
 exec container run -it --rm \
   --cpus 2 --memory 4G \
   -v "$WORKSPACE:/workspace" \
   -v "$HOME/.claude:/home/node/.claude" \
   --mount "type=bind,source=$HOME/Downloads,target=/home/node/Downloads,readonly" \
   -e CLAUDE_CONFIG_DIR=/home/node/.claude \
+  "${op_flags[@]}" \
   -u node -w /workspace \
   claude-sandbox \
   claude --dangerously-skip-permissions "$@"
@@ -171,6 +185,11 @@ read-only.
   rewrite just the managed region without clobbering your hand edits.
 - `~/.claude` is mounted read-write, so Claude inside the VM shares your login and MCP config with
   the host. If you'd rather isolate, drop that mount line and run `claude login` inside the VM.
+- The Dockerfile above installs the 1Password CLI (`op`) and the `start.sh` forwards
+  `OP_SERVICE_ACCOUNT_TOKEN` from your host if set — wired up for the 1Password
+  service-account pattern. If you don't use 1P, the binary sits unused and the env forward
+  is empty. Full integration notes at `docs/secrets.md` in the apfelkäfig repo; standalone
+  skill at `skills/1password-agent-secrets/SKILL.md`.
 - Apple `container`'s networking is still rough in v0.9 — localhost port forwarding doesn't work on
   the Apple path. For browser-driven dev, see the `assets/chrome-bridge/` scripts in the apfelkäfig
   repo (CDP proxy on :9223).

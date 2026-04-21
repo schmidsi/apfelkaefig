@@ -10,20 +10,25 @@ Anthropic endpoints only.**
 
 Positioning: "I want to let this thing rip and I don't care if it burns down its own world."
 
-## Decisions (2026-04-15 session)
+## Decisions (2026-04-15 session, revised 2026-04-22)
 
 1. **No host folder mounts.** Drop `-v $WORKSPACE`, `-v $HOME/.claude`, `-v $HOME/Downloads`.
    `/workspace` becomes tmpfs (ephemeral — nothing survives the run, by design).
-2. **Claude auth.** The existing `-e ANTHROPIC_API_KEY` pass-through was already removed
-   (commit TBD on the current branch). For `--minimal`, accept that the user must have
-   `ANTHROPIC_API_KEY` set — we're not mounting `.claude/.credentials.json`. If the user has
-   no API key, `--minimal` errors out with a clear message; the OAuth subscription path is
-   intentionally excluded to keep zero files shared from host.
-   - Open: revisit if enough users push back. A single-file bind of
-     `~/.claude/.credentials.json:ro` would be the concession. Don't do it preemptively.
-3. **Egress firewall, Anthropic-only.** iptables + ipset allowlist for `api.anthropic.com` and
-   `statsig.anthropic.com`. Everything else `DROP`. No `sentry.io`, no GitHub, no npm/PyPI.
-   Rationale: "minimal" speaks for itself.
+2. **Claude auth via 1Password.** The image already has `op` CLI and `OP_SERVICE_ACCOUNT_TOKEN`
+   forwarded from the host (landed alongside this rewrite — see `docs/secrets.md`). `--minimal`
+   rides that rail: the entrypoint resolves `ANTHROPIC_API_KEY` via
+   `op read 'op://Agents/Anthropic API Key/credential'` at startup. Net result: no
+   `.claude/.credentials.json` mount, no raw API key in the user's shell history, and the only
+   long-lived secret crossing the VM boundary is the SA token — revocable in one click.
+   - Fallback: if `OP_SERVICE_ACCOUNT_TOKEN` is unset but `ANTHROPIC_API_KEY` is exported on
+     the host, forward the raw key. Clear error if neither is present.
+   - The OAuth subscription path remains intentionally excluded to keep zero files shared
+     from host.
+3. **Egress firewall, Anthropic + 1Password.** iptables + ipset allowlist for
+   `api.anthropic.com`, `statsig.anthropic.com`, and `my.1password.com` / its CDN
+   (`cache.agilebits.com` only needed at image-build time, not runtime — but `op read` hits
+   1Password's API). Everything else `DROP`. No `sentry.io`, no GitHub, no npm/PyPI.
+   Rationale: "minimal" speaks for itself; the 1P endpoint is the cost of the auth rail.
 4. **Known residual risk, accepted.** Prompt injection → server-side tool use (web search,
    `WebFetch`) → attacker-controlled URL is still an exfil channel. The firewall doesn't
    close that hole; nothing on our side can. Worth stating in the README section for `--minimal`.
@@ -85,8 +90,26 @@ set -e
 if [ "${AKF_MINIMAL:-0}" = "1" ]; then
   /usr/local/bin/init-firewall.sh
 fi
+
+# Resolve Claude auth. Prefer 1Password; fall back to raw env.
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+  ANTHROPIC_API_KEY=$(op read 'op://Agents/Anthropic API Key/credential' --no-newline) || {
+    echo "entrypoint: failed to resolve ANTHROPIC_API_KEY via op read" >&2
+    exit 1
+  }
+  export ANTHROPIC_API_KEY
+fi
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "entrypoint: --minimal needs either OP_SERVICE_ACCOUNT_TOKEN (to resolve via 1Password) or ANTHROPIC_API_KEY set on host" >&2
+  exit 1
+fi
+
 exec gosu node claude --dangerously-skip-permissions "$@"
 ```
+
+The 1Password item path (`op://Agents/Anthropic API Key/credential`) is the convention from
+`docs/secrets.md`. Consider exposing it as an env var (`AKF_ANTHROPIC_KEY_REF`) later if users
+want to override the vault/item layout.
 
 ### `templates/.devcontainer/init-firewall.sh`
 
@@ -157,17 +180,24 @@ exec container run -it --rm \
 ### `templates/start-minimal.sh` (new)
 
 ```bash
+# One of OP_SERVICE_ACCOUNT_TOKEN or ANTHROPIC_API_KEY must be set on the host — the
+# entrypoint enforces the check with a clear message, so start-minimal.sh just forwards
+# whichever the user has.
+env_flags=()
+[[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && env_flags+=(-e "OP_SERVICE_ACCOUNT_TOKEN=$OP_SERVICE_ACCOUNT_TOKEN")
+[[ -n "${ANTHROPIC_API_KEY:-}" ]] && env_flags+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+
 exec container run -it --rm \
   --cpus 2 --memory 4G \
   --tmpfs /workspace \
-  -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required for --minimal}" \
+  "${env_flags[@]}" \
   -e AKF_MINIMAL=1 \
   -w /workspace \
   claude-sandbox "$@"
 ```
 
-Note the `:?` parameter expansion — fail fast with a clear message if the user forgot to export
-an API key.
+Deliberately forward both if both are set — the entrypoint prefers the raw key (faster, no
+1P round-trip) and falls back to `op read`.
 
 ---
 
@@ -224,7 +254,8 @@ an API key.
 - `akf init --minimal` emits a working `start-minimal.sh` alongside `build.sh` and `start.sh`.
 - Running `./start-minimal.sh` inside a scratch dir:
   - comes up with an empty tmpfs `/workspace`,
-  - has a working `claude` session authenticated via `ANTHROPIC_API_KEY`,
+  - has a working `claude` session with `ANTHROPIC_API_KEY` resolved via `op read` (preferred)
+    or forwarded raw from host env (fallback),
   - blocks `curl https://example.com` (firewall),
-  - allows `curl https://api.anthropic.com`.
+  - allows `curl https://api.anthropic.com` and `op read` against 1Password.
 - README has a "Two modes" section.

@@ -104,6 +104,17 @@ loose in it.
 (including `~/.claude` contents) it can also send to the open internet. Sandboxing limits local
 blast radius, not data egress.
 
+### Secrets inside the sandbox
+
+The image ships with the 1Password CLI (`op`) and forwards `OP_SERVICE_ACCOUNT_TOKEN` from
+your host shell if set. Inside the VM, resolve secrets on demand with `op read` — the SA
+token is the only long-lived credential crossing the boundary, and it's revocable in one
+click. See [docs/secrets.md](docs/secrets.md) for the integration, or
+[skills/1password-agent-secrets/SKILL.md](skills/1password-agent-secrets/SKILL.md) for the
+full standalone pattern (vault setup, Keychain storage, forwarding rules).
+
+If you don't use 1Password, the forward is a no-op and the `op` binary sits unused.
+
 Found a security issue? Open a GitHub issue or email the address in `git log`.
 
 ## Develop
