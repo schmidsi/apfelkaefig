@@ -15,7 +15,7 @@ Do these roughly in order — each unblocks the next. Where order is optional, i
 One-shot `gh` commands the user runs from macOS (no push needed):
 
 ```bash
-gh repo edit ApfelKaefig/apfelkaefig \
+gh repo edit schmidsi/apfelkaefig \
   --description "Disposable dev sandboxes on Apple Silicon, safe to point coding agents at." \
   --homepage "https://apfelkaefig.com" \
   --add-topic apple-silicon \

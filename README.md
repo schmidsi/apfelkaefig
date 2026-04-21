@@ -22,7 +22,7 @@ for you.
 Not packaged yet. Build from source:
 
 ```bash
-git clone https://github.com/ApfelKaefig/apfelkaefig
+git clone https://github.com/schmidsi/apfelkaefig
 cd apfelkaefig
 deno task compile
 cp dist/akf /usr/local/bin/akf

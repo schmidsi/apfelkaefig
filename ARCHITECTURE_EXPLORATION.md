@@ -73,12 +73,12 @@ Both modes share the same underlying machinery:
 - **CDP proxy**: Node TCP proxy on :9223 that rewrites Host headers so container can drive host
   Chrome via `host.docker.internal:9223` (crown jewel from original scaffold)
 
-## Reference: move-abroad Setup
+## Reference: "full" exposure shape
 
-The `/Users/schmidsi/Workbench/move-abroad` project demonstrates the "full" exposure approach:
+The sandbox layout we're generalizing from demonstrates the "full" exposure approach:
 
 - Mounts entire `~/.claude` read-write into `/home/node/.claude`
-- Passes `ANTHROPIC_API_KEY` and `OP_SERVICE_ACCOUNT_TOKEN` as env vars
+- Forwards credentials as env vars (e.g. `ANTHROPIC_API_KEY`, 1Password service account tokens)
 - Uses `container run` with 2 CPUs, 4GB RAM
 - Builds via Docker first, pushes to local registry on `localhost:5555`, then pulls into Apple
   Container (workaround for build-time networking bug)
