@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://apfelkaefig.com/schema/v1.json",
+  "title": "Apfelkäfig project config (v1)",
+  "description": "Configuration for an apfelkäfig sandbox. Drop this file at the root of your project as .apfelkaefig.json to make the project akf-native (tier 2). The akf binary reads it at run time; no scripts get committed to the repo. JSONC: comments and trailing commas are allowed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the schema this config validates against. Optional; enables IDE autocomplete."
+    },
+    "version": {
+      "type": "integer",
+      "description": "Schema version. Only `1` is accepted in this release.",
+      "const": 1
+    },
+    "image": {
+      "description": "The container image to launch. Omit to use the built-in ghcr.io/apfelkaefig/base image. Provide a string for a registry tag, or { dockerfile } to build locally.",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "A registry image tag (e.g. \"node:22-bookworm\")."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dockerfile"],
+          "properties": {
+            "dockerfile": {
+              "type": "string",
+              "description": "Path to a Dockerfile relative to the project root (e.g. \".devcontainer/Dockerfile\"). Requires Docker on the host."
+            }
+          }
+        }
+      ]
+    },
+    "mounts": {
+      "type": "array",
+      "description": "Bind mounts in addition to the defaults (workspace + ~/.claude RW + ~/Downloads RO + ~/Desktop RO).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "target"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Host path. Supports ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}."
+          },
+          "target": {
+            "type": "string",
+            "description": "Container path."
+          },
+          "readonly": {
+            "type": "boolean",
+            "default": false,
+            "description": "Mount read-only."
+          }
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variables injected into the container. Values support ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}.",
+      "additionalProperties": { "type": "string" }
+    },
+    "user": {
+      "type": "string",
+      "description": "User to run as inside the container. Defaults to \"node\"."
+    },
+    "workspaceFolder": {
+      "type": "string",
+      "description": "Path inside the container where the project is mounted. Defaults to \"/workspaces/${localWorkspaceFolderBasename}\"."
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "VM resource caps.",
+      "properties": {
+        "cpus": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of vCPUs. Defaults to 2."
+        },
+        "memory": {
+          "type": "string",
+          "pattern": "^\\d+[KMG]?$",
+          "description": "Memory cap (e.g. \"4G\", \"512M\"). Defaults to \"4G\"."
+        }
+      }
+    },
+    "command": {
+      "description": "Command to run inside the container. Defaults to [\"claude\", \"--dangerously-skip-permissions\"]. String is split on whitespace; array is passed verbatim.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Secret-injection settings.",
+      "properties": {
+        "onepassword": {
+          "type": "boolean",
+          "description": "Inject OP_SERVICE_ACCOUNT_TOKEN into the container. Implicit when the token is in the macOS keychain; set false to opt out, true to require."
+        }
+      }
+    }
+  }
+}
