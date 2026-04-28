@@ -5,7 +5,7 @@ set -e
 # Apple Container's builder has a networking bug (DNS/403 errors during builds),
 # so we build with Docker and shuttle the image via a local registry.
 
-IMAGE_NAME="claude-sandbox"
+IMAGE_NAME="$(basename "$(cd "$(dirname "$0")" && pwd)")-sandbox"
 REGISTRY="localhost:5555"
 
 echo "Building image with Docker..."

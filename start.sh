@@ -16,6 +16,7 @@
 set -e
 WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
 DEVCONTAINER="$WORKSPACE/.devcontainer/devcontainer.json"
+IMAGE_NAME="$(basename "$WORKSPACE")-sandbox"
 
 if ! command -v jq &>/dev/null; then
   echo "Error: jq is required. Install with: brew install jq" >&2
@@ -105,5 +106,5 @@ exec container run -it --rm \
   "${mount_flags[@]}" \
   "${env_flags[@]}" \
   -u "$remote_user" -w "$workspace_folder" \
-  claude-sandbox \
+  "$IMAGE_NAME" \
   claude --dangerously-skip-permissions "$@"
