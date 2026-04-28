@@ -1,0 +1,28 @@
+{
+  "name": "apfelkaefig",
+  "version": "0.2.0-dev",
+  "description": "Disposable dev sandboxes on Apple Silicon, safe to point coding agents at.",
+  "license": "MIT",
+  "homepage": "https://apfelkaefig.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ApfelKaefig/apfelkaefig.git"
+  },
+  "bin": {
+    "akf": "bin/akf.js",
+    "apfelkaefig": "bin/akf.js"
+  },
+  "scripts": {
+    "postinstall": "node ./postinstall.js"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": [
+    "bin/",
+    "postinstall.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

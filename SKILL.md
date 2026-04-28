@@ -5,197 +5,92 @@ description: Set up an Apple `container` micro-VM sandbox for running Claude Cod
 
 # Manual setup: Apfelkäfig sandbox
 
-This is the no-CLI version of `akf init`. Follow these steps to drop the sandbox into any existing
-project folder by hand. The end result is identical to running `akf init` — six files created or
-appended, then `./build.sh` and `./start.sh` to launch.
+This is the no-CLI version of `akf init` followed by `akf eject --bash`. Two paths, depending on
+whether the user wants a tiny config file or full self-contained scripts.
 
-## What you get
-
-A disposable Apple-`container` micro-VM, with your project mounted at `/workspace`, that runs Claude
-Code with `--dangerously-skip-permissions`. **The VM is the sandbox** — the agent can't touch
-anything outside the mounts, so the skipped permission prompts are redundant, not risky.
+The end result either way: a disposable Apple-`container` micro-VM, with the project mounted at
+`/workspaces/<basename>`, that runs Claude Code with `--dangerously-skip-permissions`. **The VM is
+the sandbox** — the agent can't touch anything outside the mounts, so the skipped permission prompts
+are redundant, not risky.
 
 ## Prerequisites
 
 - macOS on Apple Silicon
 - [Apple `container`](https://github.com/apple/container) v0.9 or newer
-- Docker — only for `build.sh`, until Apple fixes the builder's DNS bug
+- Docker — only if the project uses a custom `Dockerfile` (until Apple fixes the builder's DNS bug)
 
-## Steps
+## Path A — Tier 2 (akf-native)
 
-Run from the root of the project you want to sandbox.
+Use this when the user is willing to install `akf` later but wants the config in place now, or when
+collaborators on the same repo will have `akf` installed.
 
-### 1. Create `.devcontainer/Dockerfile`
+### Step 1. Create `.apfelkaefig.json`
 
-```dockerfile
-FROM debian:bookworm-slim
+Reference the file `templates/apfelkaefig.json` in the apfelkäfig repo as the canonical starter.
+Minimum content:
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl sudo ca-certificates jq \
-    ripgrep fd-find tree vim unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install GitHub CLI
-RUN ARCH=$(dpkg --print-architecture) && \
-    curl -fsSL "https://github.com/cli/cli/releases/latest/download/gh_$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r '.tag_name' | sed 's/^v//')_linux_${ARCH}.tar.gz" \
-    | tar xz --strip-components=1 -C /usr/local
-
-# Install 1Password CLI (op) for on-demand secret resolution. Harmless if unused.
-RUN ARCH=$(dpkg --print-architecture) && \
-    OP_VERSION=v2.30.3 && \
-    curl -sSfo /tmp/op.zip "https://cache.agilebits.com/dist/1P/op2/pkg/${OP_VERSION}/op_linux_${ARCH}_${OP_VERSION}.zip" && \
-    unzip -o /tmp/op.zip -d /usr/local/bin op && \
-    rm /tmp/op.zip && chmod +x /usr/local/bin/op
-
-# Non-root user
-RUN useradd -m -s /bin/bash node
-
-# Install Claude Code (as node user so auto-update works)
-USER node
-RUN curl -fsSL https://claude.ai/install.sh | bash
-ENV PATH="/home/node/.local/bin:$PATH"
-
-USER root
-WORKDIR /workspace
-```
-
-### 2. Create `.devcontainer/devcontainer.json`
-
-```json
+```jsonc
 {
-  "name": "${localWorkspaceFolderBasename}",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
-  "remoteUser": "node",
-  "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind",
-    "source=${localEnv:HOME}/Downloads,target=/home/node/Downloads,type=bind,readonly"
-  ],
-  "containerEnv": {
-    "CLAUDE_CONFIG_DIR": "/home/node/.claude"
-  },
-  "remoteEnv": {
-    "OP_SERVICE_ACCOUNT_TOKEN": "${localEnv:OP_SERVICE_ACCOUNT_TOKEN}"
-  },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
-  "workspaceFolder": "/workspace"
+  "$schema": "https://apfelkaefig.com/schema/v1.json",
+  "version": 1
 }
 ```
 
-### 3. Create `start.sh` (mark executable: `chmod +x start.sh`)
+JSONC: comments and trailing commas allowed. Add only the keys you actually need to override —
+defaults give you the built-in `ghcr.io/apfelkaefig/base` image, `node` user, workspace at
+`/workspaces/<basename>`, and `claude --dangerously-skip-permissions` as the command.
 
-```bash
-#!/bin/bash
-# Start Claude Code inside an Apple container (Apple Virtualization Framework).
-set -e
-WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
-
-if ! container system status &>/dev/null; then
-  container system start
-fi
-
-op_flags=()
-[[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && op_flags+=(-e "OP_SERVICE_ACCOUNT_TOKEN=$OP_SERVICE_ACCOUNT_TOKEN")
-
-exec container run -it --rm \
-  --cpus 2 --memory 4G \
-  -v "$WORKSPACE:/workspace" \
-  -v "$HOME/.claude:/home/node/.claude" \
-  --mount "type=bind,source=$HOME/Downloads,target=/home/node/Downloads,readonly" \
-  -e CLAUDE_CONFIG_DIR=/home/node/.claude \
-  "${op_flags[@]}" \
-  -u node -w /workspace \
-  claude-sandbox \
-  claude --dangerously-skip-permissions "$@"
-```
-
-### 4. Create `build.sh` (mark executable: `chmod +x build.sh`)
-
-Builds with Docker and shuttles the image through a local registry — workaround for Apple
-`container` v0.9's build-time DNS bug.
-
-```bash
-#!/bin/bash
-set -e
-
-IMAGE_NAME="claude-sandbox"
-REGISTRY="localhost:5555"
-
-echo "Building image with Docker..."
-docker build -t "$IMAGE_NAME" .devcontainer/
-
-echo "Starting local registry..."
-docker run -d --rm --name registry -p 5555:5000 registry:2
-
-echo "Pushing to local registry..."
-docker tag "$IMAGE_NAME" "$REGISTRY/$IMAGE_NAME"
-docker push "$REGISTRY/$IMAGE_NAME"
-
-echo "Pulling into Apple Container..."
-container image pull --scheme http "$REGISTRY/$IMAGE_NAME"
-container image tag "$REGISTRY/$IMAGE_NAME" "$IMAGE_NAME"
-
-echo "Stopping registry..."
-docker stop registry
-
-echo "Done. Image '$IMAGE_NAME' is ready for Apple Container."
-echo "Run ./start.sh to launch."
-```
-
-### 5. Append to `.gitignore`
+### Step 2. Append `.gitignore` block
 
 ```
 # >>> akf >>>
 .akf/
-dist/akf
 # <<< akf <<<
 ```
 
-### 6. Append to `CLAUDE.md` (create the file if missing)
+### Step 3. Append to `CLAUDE.md` (create if missing)
 
-```markdown
-<!-- akf:start -->
+Reference `templates/CLAUDE.block.md` in the apfelkäfig repo for the canonical block — wrap the
+contents in `<!-- akf:start -->` / `<!-- akf:end -->` markers so a future tool can rewrite the
+managed region without clobbering hand edits.
 
-## Sandbox (apfelkäfig)
-
-This folder is set up to run inside an Apple `container` micro-VM. Claude Code is launched with
-`--dangerously-skip-permissions` — **the VM is the sandbox**, so the permission prompts are
-redundant.
-
-Launch:
-
-1. `./build.sh` — build the sandbox image (one-time; rebuild when the Dockerfile changes).
-2. `./start.sh` — start Claude Code inside the sandbox.
-
-The sandbox mounts this folder at `/workspace`, `$HOME/.claude` read-write, and `$HOME/Downloads`
-read-only.
-
-<!-- akf:end -->
-```
-
-## Launch
+### Step 4. Run
 
 ```bash
-./build.sh    # one-time; rebuild when Dockerfile changes
-./start.sh    # launch Claude Code inside the sandbox
+akf up
 ```
+
+## Path B — Self-contained scripts (no akf at runtime)
+
+Use this when the user does not want any third-party binary involved at run time. Equivalent to
+`akf init --bash`. Reference `templates/start.sh`, `templates/build.sh`, and
+`templates/.devcontainer/` in the apfelkäfig repo as the source of truth — never inline them here,
+so they can't drift.
+
+The flow is:
+
+1. Copy `templates/.devcontainer/Dockerfile` and `templates/.devcontainer/devcontainer.json` to the
+   project's `.devcontainer/`.
+2. Copy `templates/start.sh` and `templates/build.sh` to the project root, `chmod +x` both.
+3. Append the same `.gitignore` and `CLAUDE.md` blocks as Path A.
+4. Run `./build.sh` (one-time) then `./start.sh`.
+
+## IDE integration (VS Code / Cursor)
+
+If `.devcontainer/` is present (Path B, or Path A with `akf init --advanced`), VS Code and Cursor
+pick it up via the Dev Containers extension. Open the folder and choose **Reopen in Container**. The
+editor server runs inside the VM, so `/ide` in Claude Code wires up on container-local loopback with
+no host port forwarding.
 
 ## Notes
 
 - The marker blocks (`# >>> akf >>>` / `<!-- akf:start -->`) exist so a future `akf update` can
-  rewrite just the managed region without clobbering your hand edits.
+  rewrite just the managed region without clobbering hand edits.
 - `~/.claude` is mounted read-write, so Claude inside the VM shares your login and MCP config with
-  the host. If you'd rather isolate, drop that mount line and run `claude login` inside the VM.
-- The Dockerfile above installs the 1Password CLI (`op`) and the `start.sh` forwards
-  `OP_SERVICE_ACCOUNT_TOKEN` from your host if set — wired up for the 1Password service-account
-  pattern. If you don't use 1P, the binary sits unused and the env forward is empty. Full
-  integration notes at `docs/secrets.md` in the apfelkäfig repo; standalone skill at
-  `skills/1password-agent-secrets/SKILL.md`.
-- Apple `container`'s networking is still rough in v0.9 — localhost port forwarding doesn't work on
-  the Apple path. For browser-driven dev, see the `assets/chrome-bridge/` scripts in the apfelkäfig
-  repo (CDP proxy on :9223).
-- For IDE integration (VS Code / Cursor, `/ide` in Claude Code, inline diffs), open the folder and
-  pick **Reopen in Container** — the `.devcontainer/` files above are all Dev Containers needs. The
-  editor server runs inside the VM, so `/ide` connects on loopback without any host port forwarding.
-  `./start.sh` remains the right path for pure terminal agent sessions.
+  the host. To isolate, drop that mount via a custom config and run `claude login` inside the VM.
+- The base image installs the 1Password CLI (`op`); `akf up` injects `OP_SERVICE_ACCOUNT_TOKEN` from
+  your env or macOS keychain by default. Use `op read` inside the VM to resolve secrets on demand.
+  See `skills/1password-agent-secrets/SKILL.md` for the full pattern.
+- Apple `container` networking is rough in v0.9 — localhost port forwarding doesn't work on the
+  Apple path. For browser-driven dev, see `assets/chrome-bridge/` in the apfelkäfig repo (CDP proxy
+  on :9223).

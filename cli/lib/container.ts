@@ -19,17 +19,26 @@ export type Runner = (
 ) => Promise<CmdResult>;
 
 export const realRunner: Runner = async (cmd, args, opts = {}) => {
-  const out = await new Deno.Command(cmd, {
-    args,
-    stdin: opts.stdin ?? "inherit",
-    stdout: opts.stdout ?? "inherit",
-    stderr: opts.stderr ?? "inherit",
-  }).output();
-  return {
-    code: out.code,
-    stdout: opts.stdout === "piped" ? new TextDecoder().decode(out.stdout) : "",
-    stderr: opts.stderr === "piped" ? new TextDecoder().decode(out.stderr) : "",
-  };
+  try {
+    const out = await new Deno.Command(cmd, {
+      args,
+      stdin: opts.stdin ?? "inherit",
+      stdout: opts.stdout ?? "inherit",
+      stderr: opts.stderr ?? "inherit",
+    }).output();
+    return {
+      code: out.code,
+      stdout: opts.stdout === "piped" ? new TextDecoder().decode(out.stdout) : "",
+      stderr: opts.stderr === "piped" ? new TextDecoder().decode(out.stderr) : "",
+    };
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      // Binary missing on PATH — surface as a non-zero exit so callers
+      // can present a useful message rather than a stack trace.
+      return { code: 127, stdout: "", stderr: `${cmd}: not found` };
+    }
+    throw err;
+  }
 };
 
 export interface RunFlagsInput {

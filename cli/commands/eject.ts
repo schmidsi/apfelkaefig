@@ -284,6 +284,12 @@ function mountObjToString(m: { source: string; target: string; readonly?: boolea
 
 function shellQuote(s: string): string {
   if (/^[A-Za-z0-9_./@%+:=-]+$/.test(s)) return s;
+  // Preserve $VAR expansion: if the only "unsafe" chars are $/{}, double-quote
+  // it so the shell still interpolates. Otherwise single-quote to disable
+  // interpolation entirely.
+  if (/^[A-Za-z0-9_./@%+:=${}-]+$/.test(s)) {
+    return `"${s.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+  }
   return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
