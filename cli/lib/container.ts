@@ -51,7 +51,6 @@ export function buildRunArgs(
   const e = effective(input.resolved);
   const c: ApfelkaefigConfig = input.resolved.config;
   const home = input.homeDir ?? Deno.env.get("HOME") ?? "";
-  const wsBasename = basename(input.workspaceHostPath);
   const subCtx = { workspaceFolder: input.workspaceHostPath, env: Deno.env.toObject() };
   const sub = (s: string) => substitute(s, subCtx);
 

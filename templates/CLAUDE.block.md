@@ -6,8 +6,14 @@ redundant.
 
 Launch:
 
-1. `./build.sh` — build the sandbox image (one-time; rebuild when the Dockerfile changes).
-2. `./start.sh` — start Claude Code inside the sandbox.
+```
+akf up
+```
 
-The sandbox mounts this folder at `/workspace`, `$HOME/.claude` read-write, and `$HOME/Downloads`
-and `$HOME/Desktop` read-only.
+Configuration lives in `.apfelkaefig.json`. The sandbox mounts this folder at
+`/workspaces/<basename>`, `$HOME/.claude` read-write, and `$HOME/Downloads` and `$HOME/Desktop`
+read-only.
+
+If you'd rather not depend on the `akf` binary, run `akf eject --bash` to write standalone
+`build.sh` + `start.sh`, or `akf eject --devcontainer` to write a `.devcontainer/devcontainer.json`
+that VS Code Dev Containers / Codespaces / Coder can pick up.

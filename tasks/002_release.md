@@ -48,6 +48,7 @@ New subcommand. Checks:
 Wire into `init` as a soft preflight (current check is just `container --version`; expand it).
 
 Files to create/touch:
+
 - `src/commands/doctor.ts`
 - `src/main.ts` — dispatch `doctor`
 - `src/lib/preflight.ts` — shared by `init` and `doctor`
@@ -55,10 +56,11 @@ Files to create/touch:
 ### Smoke test for `init`
 
 Add a tmpdir-based integration test alongside `src/lib/fs_test.ts`:
+
 - Point `runInit` at a fresh tmpdir, assert all six files land with the expected content.
 - Re-run, assert every status is `skipped-*` and no mtimes change.
-- Pre-populate `CLAUDE.md` with user content, run `init`, assert user content is preserved above
-  the marker block.
+- Pre-populate `CLAUDE.md` with user content, run `init`, assert user content is preserved above the
+  marker block.
 
 Probably `src/commands/init_test.ts`.
 
@@ -69,6 +71,7 @@ Probably `src/commands/init_test.ts`.
 Two workflows:
 
 **`.github/workflows/ci.yml`** — on push/PR:
+
 ```
 - deno fmt --check
 - deno lint
@@ -76,9 +79,11 @@ Two workflows:
 - deno task test
 - deno task compile     # smoke: ensure the binary builds
 ```
+
 Run on `macos-14` (Apple Silicon) so the compiled binary matches what users will install.
 
 **`.github/workflows/release.yml`** — on tag `v*`:
+
 ```
 - deno task compile
 - Upload dist/akf to the GitHub Release
@@ -91,8 +96,8 @@ Use `denoland/setup-deno@v2` to install Deno. Cache `~/.cache/deno`.
 
 ## 5. npm distribution
 
-Single package `apfelkaefig` (Apple-Silicon-only, so we don't need the esbuild-style
-multi-target optionalDependencies dance yet).
+Single package `apfelkaefig` (Apple-Silicon-only, so we don't need the esbuild-style multi-target
+optionalDependencies dance yet).
 
 Shape:
 
@@ -104,6 +109,7 @@ npm/
 ```
 
 `bin/akf.mjs` pseudocode:
+
 ```js
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
@@ -111,14 +117,16 @@ if (process.platform !== "darwin" || process.arch !== "arm64") {
   console.error("apfelkaefig requires macOS on Apple Silicon.");
   process.exit(1);
 }
-execFileSync(new URL("../vendor/akf", import.meta.url), process.argv.slice(2),
-  { stdio: "inherit" });
+execFileSync(new URL("../vendor/akf", import.meta.url), process.argv.slice(2), {
+  stdio: "inherit",
+});
 ```
 
 Release workflow copies `dist/akf` into `npm/vendor/`, runs `npm publish` from `npm/` with
 `NODE_AUTH_TOKEN`. Version in `npm/package.json` is bumped from `deno.json` via a small script.
 
-Once published, the SKILL.md "try before you install" pitch gets a real shortcut: `npx apfelkaefig init`.
+Once published, the SKILL.md "try before you install" pitch gets a real shortcut:
+`npx apfelkaefig init`.
 
 ---
 
@@ -158,8 +166,8 @@ Embed in README under the "Use" section.
 ## Smaller loose ends
 
 - **`assets/chrome-bridge/` is currently dangling** — referenced from SKILL.md's "notes" but not
-  shipped by `init`. Either wire it into v0.2 (Chrome CDP proxy), or drop the reference from SKILL.md
-  until it's real.
+  shipped by `init`. Either wire it into v0.2 (Chrome CDP proxy), or drop the reference from
+  SKILL.md until it's real.
 - **`CHANGELOG.md`** — start one on the first tag. Even a one-entry `## v0.1.0` with a link to the
   GitHub Release notes is enough.
 - **Minimum `container` version** — pick an exact floor (probably `0.9.0` since that's what we've

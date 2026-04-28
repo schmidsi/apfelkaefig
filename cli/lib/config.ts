@@ -97,9 +97,7 @@ export function validate(value: unknown, sourcePath?: string): ApfelkaefigConfig
   for (const key of Object.keys(obj)) {
     if (!ALLOWED_TOP_LEVEL_KEYS.has(key)) {
       throw new ConfigError(
-        `unknown top-level key '${key}'. Allowed: ${
-          [...ALLOWED_TOP_LEVEL_KEYS].sort().join(", ")
-        }`,
+        `unknown top-level key '${key}'. Allowed: ${[...ALLOWED_TOP_LEVEL_KEYS].sort().join(", ")}`,
         sourcePath,
       );
     }

@@ -10,9 +10,9 @@ Status: pre-release (v0.1 MVP). macOS / Apple Silicon only.
 
 ## Try it without installing anything
 
-Don't want to install a third-party binary before you know what it does? Read **[SKILL.md](SKILL.md)** —
-the same scaffold, step by step, as six files you paste into your project by hand. `akf init` just
-automates that.
+Don't want to install a third-party binary before you know what it does? Read
+**[SKILL.md](SKILL.md)** — the same scaffold, step by step, as six files you paste into your project
+by hand. `akf init` just automates that.
 
 You can also drop `SKILL.md` into `~/.claude/skills/apfelkaefig/` and let Claude Code run the setup
 for you.
@@ -54,12 +54,12 @@ Existing files are never overwritten. Re-running `akf init` is a no-op.
 
 ## IDE integration (VS Code / Cursor)
 
-The `.devcontainer/` files that `akf init` drops in are also picked up by VS Code and Cursor's
-Dev Containers extension. For IDE-attached work — inline diffs, `/ide` in Claude Code, editor
-diagnostics — open the folder in VS Code or Cursor and choose **Reopen in Container**. The
-editor server runs inside the VM, so everything wires up on container-local loopback with no
-host-to-VM port forwarding needed. Use `./start.sh` for pure terminal agent sessions; use
-Reopen in Container when you want the editor in the loop.
+The `.devcontainer/` files that `akf init` drops in are also picked up by VS Code and Cursor's Dev
+Containers extension. For IDE-attached work — inline diffs, `/ide` in Claude Code, editor
+diagnostics — open the folder in VS Code or Cursor and choose **Reopen in Container**. The editor
+server runs inside the VM, so everything wires up on container-local loopback with no host-to-VM
+port forwarding needed. Use `./start.sh` for pure terminal agent sessions; use Reopen in Container
+when you want the editor in the loop.
 
 ## Requirements
 
@@ -71,33 +71,32 @@ Reopen in Container when you want the editor in the loop.
 
 Claude Code and other coding agents stop every few turns to ask permission for Bash commands, file
 writes, or WebFetch domains. `--dangerously-skip-permissions` silences the prompts but only makes
-sense when the agent genuinely can't escape — i.e., when it's running inside a VM whose only writable
-mounts are the workspace and `~/.claude`. That's what apfelkäfig sets up, using Apple's native
-`container` CLI (lightweight VMs, no Docker Desktop tax on Apple Silicon).
+sense when the agent genuinely can't escape — i.e., when it's running inside a VM whose only
+writable mounts are the workspace and `~/.claude`. That's what apfelkäfig sets up, using Apple's
+native `container` CLI (lightweight VMs, no Docker Desktop tax on Apple Silicon).
 
 See [POSITIONING.md](POSITIONING.md) for the competitive landscape and
 [ARCHITECTURE_EXPLORATION.md](ARCHITECTURE_EXPLORATION.md) for the design notes.
 
 ## Security model
 
-The VM is the trust boundary. Inside it, Claude runs with every permission prompt disabled —
-that's the point. You should understand exactly what the VM can reach before letting an agent
-loose in it.
+The VM is the trust boundary. Inside it, Claude runs with every permission prompt disabled — that's
+the point. You should understand exactly what the VM can reach before letting an agent loose in it.
 
 **The agent inside the sandbox can:**
 
 - Read and write everything in the project folder (mounted at `/workspace`).
-- Read and write your **entire `~/.claude` directory** — memories, MCP configs, login tokens,
-  other projects' settings. This is a deliberate trade-off (so the agent shares your login and
-  MCP setup with the host) but it means "sandboxed" does **not** mean "isolated from your Claude
-  account." If that bothers you, drop the `~/.claude` mount from `start.sh` and run `claude login`
-  inside the VM instead.
+- Read and write your **entire `~/.claude` directory** — memories, MCP configs, login tokens, other
+  projects' settings. This is a deliberate trade-off (so the agent shares your login and MCP setup
+  with the host) but it means "sandboxed" does **not** mean "isolated from your Claude account." If
+  that bothers you, drop the `~/.claude` mount from `start.sh` and run `claude login` inside the VM
+  instead.
 - Reach the public internet on any port.
 
 **The agent cannot:**
 
-- Touch anything else on your host — including other project folders, your home directory, or
-  shell history.
+- Touch anything else on your host — including other project folders, your home directory, or shell
+  history.
 - Write to `~/Downloads` (read-only mount, so it can read files you drop in but not modify them).
 
 **Not covered:** secret exfiltration via network. Anything the agent can read inside the VM
@@ -106,12 +105,12 @@ blast radius, not data egress.
 
 ### Secrets inside the sandbox
 
-The image ships with the 1Password CLI (`op`) and forwards `OP_SERVICE_ACCOUNT_TOKEN` from
-your host shell if set. Inside the VM, resolve secrets on demand with `op read` — the SA
-token is the only long-lived credential crossing the boundary, and it's revocable in one
-click. See [docs/secrets.md](docs/secrets.md) for the integration, or
-[skills/1password-agent-secrets/SKILL.md](skills/1password-agent-secrets/SKILL.md) for the
-full standalone pattern (vault setup, Keychain storage, forwarding rules).
+The image ships with the 1Password CLI (`op`) and forwards `OP_SERVICE_ACCOUNT_TOKEN` from your host
+shell if set. Inside the VM, resolve secrets on demand with `op read` — the SA token is the only
+long-lived credential crossing the boundary, and it's revocable in one click. See
+[docs/secrets.md](docs/secrets.md) for the integration, or
+[skills/1password-agent-secrets/SKILL.md](skills/1password-agent-secrets/SKILL.md) for the full
+standalone pattern (vault setup, Keychain storage, forwarding rules).
 
 If you don't use 1Password, the forward is a no-op and the `op` binary sits unused.
 

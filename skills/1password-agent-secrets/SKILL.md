@@ -5,7 +5,8 @@ description: Set up secret management for AI agents and dev environments using a
 
 # 1Password Service Account Secrets for Agents
 
-A layered pattern that lets agents, scripts, and containers fetch secrets at runtime without any secret ever resting on disk in plaintext.
+A layered pattern that lets agents, scripts, and containers fetch secrets at runtime without any
+secret ever resting on disk in plaintext.
 
 ```
 1Password vault
@@ -16,14 +17,18 @@ A layered pattern that lets agents, scripts, and containers fetch secrets at run
                           └─> `op read 'op://Vault/Item/field'` at the moment the secret is needed
 ```
 
-Why three layers: the SA token is the *only* secret that ever lives outside 1Password, and it only lives in the Keychain (encrypted at rest). Every other secret — email passwords, GitHub PATs, SSH keys, API keys — is pulled from 1Password on demand and exists only in process memory.
+Why three layers: the SA token is the _only_ secret that ever lives outside 1Password, and it only
+lives in the Keychain (encrypted at rest). Every other secret — email passwords, GitHub PATs, SSH
+keys, API keys — is pulled from 1Password on demand and exists only in process memory.
 
 ## When to use this skill
 
 Trigger when the user asks to:
+
 - Let an agent, CI job, or container access secrets programmatically
 - Wire up `op` CLI with a service account
-- Fix a cryptic `op` error like `failed to session.DecodeSACredentials` / `unexpected end of JSON input`
+- Fix a cryptic `op` error like `failed to session.DecodeSACredentials` /
+  `unexpected end of JSON input`
 - Store a long token in macOS Keychain and it seems corrupted
 - Give a Docker/Apple Container/devcontainer workload access to 1Password
 - Replace hardcoded secrets or `.env` files with 1Password lookups
@@ -33,7 +38,8 @@ Trigger when the user asks to:
 1. Sign in to 1Password web app → **Developer** → **Service Accounts** → **Create Service Account**.
 2. Name it for the consumer (e.g. `claude-agent`, `ci-builder`, `home-lab`).
 3. Grant **Read-only** access — service accounts should never write.
-4. On the next screen, **select only the dedicated vault** (step 2). Do *not* grant access to your personal vault.
+4. On the next screen, **select only the dedicated vault** (step 2). Do _not_ grant access to your
+   personal vault.
 5. Copy the token (`ops_eyJ...`, ~850 chars). Shown once. If lost, rotate.
 
 Rotation later: same UI → revoke → create new → update the Keychain entry (step 3).
@@ -44,39 +50,48 @@ Keep a hard boundary between "human uses this" and "an agent can read this."
 
 1. 1Password web → **Vaults** → **New Vault**. Name it `Agents` (or similar).
 2. Grant the service account **Read** on this vault only.
-3. Move or copy into it only the items the agent legitimately needs. Never the vault with your personal banking / identity items.
-4. Use clear item names — they become part of the `op read` reference: `op://Agents/Fastmail Agent Password/password`.
+3. Move or copy into it only the items the agent legitimately needs. Never the vault with your
+   personal banking / identity items.
+4. Use clear item names — they become part of the `op read` reference:
+   `op://Agents/Fastmail Agent Password/password`.
 
 Conventions that help:
-- One item per consumer, not one item with many fields shared across consumers — simplifies revocation.
-- Suffix items with "Agent" (`Fastmail Agent Password`, `GitHub Agent Token`) so it's obvious in the vault which credentials are agent-scoped.
+
+- One item per consumer, not one item with many fields shared across consumers — simplifies
+  revocation.
+- Suffix items with "Agent" (`Fastmail Agent Password`, `GitHub Agent Token`) so it's obvious in the
+  vault which credentials are agent-scoped.
 - Store the matching username/URL on the item too — `op read` can pull any field.
 
 ## Step 3 — Store the SA token in macOS Keychain
 
-The SA token is the bootstrap secret. Put it in Keychain so it's encrypted at rest and gated by the user session.
+The SA token is the bootstrap secret. Put it in Keychain so it's encrypted at rest and gated by the
+user session.
 
 ### The 128-character silent truncation bug
 
 macOS `security add-generic-password` has two modes for specifying the password:
 
-| Mode | Behavior |
-|---|---|
-| `-w VALUE` (inline) | Stores full value |
+| Mode                                 | Behavior                                 |
+| ------------------------------------ | ---------------------------------------- |
+| `-w VALUE` (inline)                  | Stores full value                        |
 | `-w` (no value → interactive prompt) | **Silently truncates at 128 characters** |
 
-A 1Password SA token is ~850 chars. The interactive prompt cuts it mid-JWT. No error is raised. Later, `op` fails with a cryptic downstream error:
+A 1Password SA token is ~850 chars. The interactive prompt cuts it mid-JWT. No error is raised.
+Later, `op` fails with a cryptic downstream error:
 
 ```
 failed to session.DecodeSACredentials
 unexpected end of JSON input
 ```
 
-— because the base64 JWT was chopped, so the decoded JSON is invalid. If you ever see this, suspect truncation first.
+— because the base64 JWT was chopped, so the decoded JSON is invalid. If you ever see this, suspect
+truncation first.
 
 ### Safe install command
 
-Pass the token as an inline argument, but keep it out of shell history by routing it through a temp file and `xargs`:
+Pass the token as an inline argument, but keep it out of shell history by routing it through a temp
+file and `xargs`:
 
 ```bash
 # 1. Put the token in a temp file (gitignored; delete after)
@@ -95,12 +110,14 @@ rm -P /tmp/op-token    # or: shred -u on Linux
 ```
 
 Flags:
+
 - `-s op-agent-vault` — service name (arbitrary label for lookup)
 - `-a service-account` — account name (arbitrary label for lookup)
 - `-U` — update in place if entry already exists (for rotation)
 - `-w` — read the password from the argument `xargs` appends
 
-Don't try `-X` (hex) as a workaround — it doubles the length and often blows past `xargs`' `ARG_MAX`.
+Don't try `-X` (hex) as a workaround — it doubles the length and often blows past `xargs`'
+`ARG_MAX`.
 
 ### Verify
 
@@ -121,18 +138,24 @@ export OP_SERVICE_ACCOUNT_TOKEN="$(security find-generic-password \
 ```
 
 Properties:
+
 - The token lives only in this shell's process memory.
 - No `.env`, no dotfile contains the token.
 - A filesystem-wide grep for `ops_eyJ` turns up nothing.
-- Keychain access is gated by the user's login session — if someone steals the disk, they don't get the token.
+- Keychain access is gated by the user's login session — if someone steals the disk, they don't get
+  the token.
 
-`2>/dev/null` suppresses the error when the entry doesn't exist yet (useful before first-time setup).
+`2>/dev/null` suppresses the error when the entry doesn't exist yet (useful before first-time
+setup).
 
 Restart the shell (`exec zsh`) or `source ~/.zshrc` after editing.
 
 ## Step 5 — Forward into containers and subprocesses
 
-The rule: forward only `OP_SERVICE_ACCOUNT_TOKEN`. Never forward the resolved secrets — let the container resolve them itself via `op read`. That way, if the container is compromised, only the short-term running secrets are exposed; the SA token can be revoked immediately in 1Password and all downstream access stops.
+The rule: forward only `OP_SERVICE_ACCOUNT_TOKEN`. Never forward the resolved secrets — let the
+container resolve them itself via `op read`. That way, if the container is compromised, only the
+short-term running secrets are exposed; the SA token can be revoked immediately in 1Password and all
+downstream access stops.
 
 ### Docker / Apple Container
 
@@ -173,7 +196,9 @@ ExecStart=...
 
 ### SSH into a remote host
 
-`ssh -o SendEnv=OP_SERVICE_ACCOUNT_TOKEN user@host` plus `AcceptEnv OP_SERVICE_ACCOUNT_TOKEN` in the server's `sshd_config`. Only do this if the remote is trusted — forwarding the SA token gives that host full agent-vault access.
+`ssh -o SendEnv=OP_SERVICE_ACCOUNT_TOKEN user@host` plus `AcceptEnv OP_SERVICE_ACCOUNT_TOKEN` in the
+server's `sshd_config`. Only do this if the remote is trusted — forwarding the SA token gives that
+host full agent-vault access.
 
 ## Step 6 — Retrieve secrets at the point of use
 
@@ -188,7 +213,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 (On macOS: `brew install 1password-cli`.)
 
-With `OP_SERVICE_ACCOUNT_TOKEN` set, `op` is non-interactive — no sign-in, no biometrics, no Touch ID prompt.
+With `OP_SERVICE_ACCOUNT_TOKEN` set, `op` is non-interactive — no sign-in, no biometrics, no Touch
+ID prompt.
 
 ### Reference syntax
 
@@ -197,7 +223,8 @@ op://<Vault>/<Item>/<field>
 op://<Vault>/<Item>/<section>/<field>
 ```
 
-Spaces in names are fine. The `--no-newline` flag is almost always what you want when piping into other tools.
+Spaces in names are fine. The `--no-newline` flag is almost always what you want when piping into
+other tools.
 
 ### Examples
 
@@ -209,7 +236,8 @@ backend.auth.type = "password"
 backend.auth.cmd = "op read 'op://Agents/Fastmail Agent Password/password' --no-newline"
 ```
 
-Most mail clients with a `passwordcmd` / `PassCmd` option work the same way (mutt, offlineimap, isync).
+Most mail clients with a `passwordcmd` / `PassCmd` option work the same way (mutt, offlineimap,
+isync).
 
 **GitHub personal access token — gh / git:**
 
@@ -255,33 +283,41 @@ EOF
 op run --env-file=.env.tpl -- my-app
 ```
 
-`op run` resolves the references, sets the env vars for the child process only, and redacts them from its stdout/stderr.
+`op run` resolves the references, sets the env vars for the child process only, and redacts them
+from its stdout/stderr.
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `failed to session.DecodeSACredentials` / `unexpected end of JSON input` | 128-char Keychain truncation | Step 3 — reinstall via `xargs`, not interactive prompt |
-| `echo $OP_SERVICE_ACCOUNT_TOKEN` is empty in container | Host env not forwarded | Step 5 — add `-e OP_SERVICE_ACCOUNT_TOKEN` or `remoteEnv` |
-| `op` asks for sign-in | SA token not set, or set but invalid | Verify host shell has it, and it forwards into the container |
-| `op read` returns nothing | Service account lacks access to that vault/item | 1Password admin UI → grant SA read on vault |
-| `op read` hangs | Service account token revoked/expired | Rotate token in 1Password, update Keychain (step 3 with `-U`) |
-| Keychain entry exists but `find-generic-password` can't find it | Wrong `-s`/`-a` labels | `security dump-keychain | grep op-agent` to locate |
+| Symptom                                                                  | Cause                                           | Fix                                                           |
+| ------------------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------- |
+| `failed to session.DecodeSACredentials` / `unexpected end of JSON input` | 128-char Keychain truncation                    | Step 3 — reinstall via `xargs`, not interactive prompt        |
+| `echo $OP_SERVICE_ACCOUNT_TOKEN` is empty in container                   | Host env not forwarded                          | Step 5 — add `-e OP_SERVICE_ACCOUNT_TOKEN` or `remoteEnv`     |
+| `op` asks for sign-in                                                    | SA token not set, or set but invalid            | Verify host shell has it, and it forwards into the container  |
+| `op read` returns nothing                                                | Service account lacks access to that vault/item | 1Password admin UI → grant SA read on vault                   |
+| `op read` hangs                                                          | Service account token revoked/expired           | Rotate token in 1Password, update Keychain (step 3 with `-U`) |
+| Keychain entry exists but `find-generic-password` can't find it          | Wrong `-s`/`-a` labels                          | `security dump-keychain                                       |
 
 ## Security properties this gives you
 
 - **Zero secrets on disk** (except the SA token, which is inside an encrypted Keychain blob).
-- **Revocable in one click** — revoking the SA in 1Password breaks *every* downstream consumer instantly.
+- **Revocable in one click** — revoking the SA in 1Password breaks _every_ downstream consumer
+  instantly.
 - **Auditable** — 1Password logs every `op read` by service account.
 - **Scoped** — SA only sees the `Agents` vault, never personal items.
-- **Grep-safe** — a full-disk search for token prefixes (`ops_eyJ`, `ghp_`, `sk-ant-`) turns up nothing.
-- **Rotatable without code changes** — rotating a secret in 1Password is a single edit; consumers pick it up on next `op read`.
+- **Grep-safe** — a full-disk search for token prefixes (`ops_eyJ`, `ghp_`, `sk-ant-`) turns up
+  nothing.
+- **Rotatable without code changes** — rotating a secret in 1Password is a single edit; consumers
+  pick it up on next `op read`.
 
 ## Anti-patterns to avoid
 
 - ❌ Giving the service account access to your personal vault "for convenience"
-- ❌ Resolving all secrets at boot and exporting them as env vars into a long-running process — this recreates the "secrets sitting in memory" problem across the whole process tree. Resolve at the point of use.
+- ❌ Resolving all secrets at boot and exporting them as env vars into a long-running process — this
+  recreates the "secrets sitting in memory" problem across the whole process tree. Resolve at the
+  point of use.
 - ❌ Writing `op read` output to `.env` files "to cache it" — defeats the entire design
-- ❌ Sharing the SA token across multiple agents/hosts — one compromise takes them all down; use one SA per consumer
-- ❌ Forwarding resolved secrets instead of the SA token into containers — if the container is compromised you can't revoke cleanly
+- ❌ Sharing the SA token across multiple agents/hosts — one compromise takes them all down; use one
+  SA per consumer
+- ❌ Forwarding resolved secrets instead of the SA token into containers — if the container is
+  compromised you can't revoke cleanly
 - ❌ Storing the SA token in a dotfile — use the Keychain

@@ -156,6 +156,7 @@ dist/akf
 
 ```markdown
 <!-- akf:start -->
+
 ## Sandbox (apfelkäfig)
 
 This folder is set up to run inside an Apple `container` micro-VM. Claude Code is launched with
@@ -169,6 +170,7 @@ Launch:
 
 The sandbox mounts this folder at `/workspace`, `$HOME/.claude` read-write, and `$HOME/Downloads`
 read-only.
+
 <!-- akf:end -->
 ```
 
@@ -186,14 +188,14 @@ read-only.
 - `~/.claude` is mounted read-write, so Claude inside the VM shares your login and MCP config with
   the host. If you'd rather isolate, drop that mount line and run `claude login` inside the VM.
 - The Dockerfile above installs the 1Password CLI (`op`) and the `start.sh` forwards
-  `OP_SERVICE_ACCOUNT_TOKEN` from your host if set — wired up for the 1Password
-  service-account pattern. If you don't use 1P, the binary sits unused and the env forward
-  is empty. Full integration notes at `docs/secrets.md` in the apfelkäfig repo; standalone
-  skill at `skills/1password-agent-secrets/SKILL.md`.
+  `OP_SERVICE_ACCOUNT_TOKEN` from your host if set — wired up for the 1Password service-account
+  pattern. If you don't use 1P, the binary sits unused and the env forward is empty. Full
+  integration notes at `docs/secrets.md` in the apfelkäfig repo; standalone skill at
+  `skills/1password-agent-secrets/SKILL.md`.
 - Apple `container`'s networking is still rough in v0.9 — localhost port forwarding doesn't work on
   the Apple path. For browser-driven dev, see the `assets/chrome-bridge/` scripts in the apfelkäfig
   repo (CDP proxy on :9223).
-- For IDE integration (VS Code / Cursor, `/ide` in Claude Code, inline diffs), open the folder
-  and pick **Reopen in Container** — the `.devcontainer/` files above are all Dev Containers
-  needs. The editor server runs inside the VM, so `/ide` connects on loopback without any host
-  port forwarding. `./start.sh` remains the right path for pure terminal agent sessions.
+- For IDE integration (VS Code / Cursor, `/ide` in Claude Code, inline diffs), open the folder and
+  pick **Reopen in Container** — the `.devcontainer/` files above are all Dev Containers needs. The
+  editor server runs inside the VM, so `/ide` connects on loopback without any host port forwarding.
+  `./start.sh` remains the right path for pure terminal agent sessions.

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://apfelkaefig.com/schema/v1.json",
+  "version": 1
+  // Image: omit for the built-in ghcr.io/apfelkaefig/base, set a registry
+  // tag (e.g. "node:22-bookworm"), or build locally:
+  //   "image": { "dockerfile": ".devcontainer/Dockerfile" }
+
+  // Extra mounts beyond the defaults
+  // (workspace + ~/.claude RW + ~/Downloads RO + ~/Desktop RO).
+  // "mounts": [
+  //   { "source": "${localEnv:HOME}/.config/gh", "target": "/home/node/.config/gh" }
+  // ],
+
+  // Env injected at run time. Substitution: ${localEnv:VAR},
+  // ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}.
+  // "env": {
+  //   "TZ": "UTC"
+  // },
+
+  // "user": "node",
+  // "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  // "resources": { "cpus": 2, "memory": "4G" },
+  // "command": ["claude", "--dangerously-skip-permissions"],
+
+  // 1Password injection is implicit-on when OP_SERVICE_ACCOUNT_TOKEN is in
+  // your env or macOS keychain. Set false to opt out, true to require.
+  // "secrets": { "onepassword": true }
+}
