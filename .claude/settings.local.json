@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs cat:*)",
+      "Bash(deno --version)",
+      "Bash(deno task:*)",
+      "Read(//Users/schmidsi/Workbench/_daily_work/**)",
+      "Read(//Users/schmidsi/Workbench/_daily_work/.devcontainer/**)",
+      "Bash(container images *)",
+      "Bash(container ls *)",
+      "Bash(container --help)",
+      "Bash(container image *)",
+      "Bash(gh api *)",
+      "Read(//private/tmp/**)"
+    ]
+  }
+}
