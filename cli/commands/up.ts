@@ -78,7 +78,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
     if (image.needsBuild) {
       if (isBuiltInBuild) {
         console.error(
-          `akf up: built-in base image '${image.ref}' not cached — building (one-time, ~5 min)…`,
+          `akf up: built-in base image '${image.ref}' not cached — building (one-time, takes a minute or two)…`,
         );
       } else {
         console.error(
