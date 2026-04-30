@@ -5,7 +5,7 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl sudo ca-certificates jq \
-    ripgrep fd-find tree vim unzip \
+    ripgrep fd-find tree vim unzip xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI
