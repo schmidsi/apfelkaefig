@@ -4,6 +4,13 @@ Sandboxed dev environment built on Apple's native `container` CLI. Disposable, h
 on Apple Silicon, also safe to point coding agents at (Claude Code, Codex, Gemini CLI). **Dual-use,
 dev-first.** See `POSITIONING.md` for the full naming/strategy brainstorm.
 
+## Scope
+
+The primary user of this project is me. Making it usable for other people is nice, but not a
+priority. Optimize decisions for "works on Simon's machine, ships fast" over "polished for
+strangers." Distribution surfaces (Homebrew, npm, ghcr.io publishing) are deferred until they pay
+for themselves.
+
 ## Status
 
 Pre-code. The repo currently holds the leftover `create-claude-in-an-apple` npx scaffolder from a

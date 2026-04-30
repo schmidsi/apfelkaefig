@@ -4,7 +4,7 @@
 import { containerVersion, imageExists, realRunner, type Runner } from "../lib/container.ts";
 import { ConfigError, findConfig, resolveConfig } from "../lib/config.ts";
 import { findOpToken, TruncatedTokenError } from "../lib/secrets.ts";
-import { builtInBaseImage } from "../lib/baseimage.ts";
+import { builtInImage } from "../lib/baseimage.ts";
 
 const MIN_CONTAINER_MAJOR = 0;
 const MIN_CONTAINER_MINOR = 9;
@@ -96,23 +96,31 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
     }
   }
 
-  // Docker — only required when a Dockerfile is in scope.
-  const dockerfileInScope = !!(resolved && typeof resolved.config.image === "object" &&
+  // Resolve built-in image up front so we can decide whether docker is needed.
+  const base = await builtInImage();
+
+  // Docker — required when a project Dockerfile is in scope OR when the
+  // built-in base image is embedded (MVP: no ghcr.io publishing yet, so the
+  // base image is built locally on first `akf up`).
+  const projectDockerfile = !!(resolved && typeof resolved.config.image === "object" &&
     resolved.config.image && "dockerfile" in resolved.config.image);
-  if (dockerfileInScope) {
+  const builtInNeedsBuild = !!base.embedded && resolved?.config.image === undefined;
+  const dockerNeeded = projectDockerfile || builtInNeedsBuild;
+  if (dockerNeeded) {
     const dr = await run("docker", ["--version"], { stdout: "null", stderr: "null" });
+    const reason = projectDockerfile
+      ? "config has image.dockerfile"
+      : "built-in base image is built locally (ghcr.io publishing deferred)";
     checks.push({
       label: "docker",
       severity: dr.code === 0 ? "ok" : "fail",
-      detail: dr.code === 0
-        ? "found"
-        : "required (config has image.dockerfile) but not found on PATH",
+      detail: dr.code === 0 ? `found (${reason})` : `required (${reason}) but not found on PATH`,
     });
   } else {
     checks.push({
       label: "docker",
       severity: "info",
-      detail: "not required (no custom Dockerfile in config)",
+      detail: "not required",
     });
   }
 
@@ -144,12 +152,12 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
   }
 
   // Base image presence — info-only.
-  const baseRef = builtInBaseImage();
-  const baseHere = await imageExists(baseRef, run);
+  const baseHere = await imageExists(base.ref, run);
+  const action = base.embedded ? "build on first use" : "pull on first use";
   checks.push({
     label: "base image",
     severity: "info",
-    detail: baseHere ? `${baseRef} cached` : `${baseRef} not cached (will pull on first use)`,
+    detail: baseHere ? `${base.ref} cached` : `${base.ref} not cached (will ${action})`,
   });
 
   // Render.

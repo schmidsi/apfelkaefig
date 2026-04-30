@@ -1,8 +1,9 @@
 {
   "$schema": "https://apfelkaefig.com/schema/v1.json",
   "version": 1
-  // Image: omit for the built-in ghcr.io/apfelkaefig/base, set a registry
-  // tag (e.g. "node:22-bookworm"), or build locally:
+  // Image: omit to use the built-in base (built locally on first `akf up`
+  // from an embedded Dockerfile; cached as apfelkaefig-base:<hash>), set a
+  // registry tag (e.g. "node:22-bookworm"), or point at a custom Dockerfile:
   //   "image": { "dockerfile": ".devcontainer/Dockerfile" }
 
   // Extra mounts beyond the defaults

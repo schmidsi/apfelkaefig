@@ -20,14 +20,27 @@ Deno.test("projectImageTag derives from workspace basename", () => {
   assertEquals(projectImageTag("/"), "akf-sandbox");
 });
 
-Deno.test("resolveImageRef: built-in default when image unset", () => {
-  const r = resolveImageRef({ version: 1 }, "/p", "ghcr.io/apfelkaefig/base@sha256:abc");
+Deno.test("resolveImageRef: registry built-in (no Dockerfile) when image unset", () => {
+  const r = resolveImageRef({ version: 1 }, "/p", {
+    ref: "ghcr.io/apfelkaefig/base@sha256:abc",
+  });
   assertEquals(r.ref, "ghcr.io/apfelkaefig/base@sha256:abc");
   assertEquals(r.needsBuild, false);
+  assertEquals(r.dockerfile, undefined);
+});
+
+Deno.test("resolveImageRef: embedded built-in triggers build when image unset", () => {
+  const r = resolveImageRef({ version: 1 }, "/p", {
+    ref: "apfelkaefig-base:abc123",
+    dockerfile: "/cache/abc123/Dockerfile",
+  });
+  assertEquals(r.ref, "apfelkaefig-base:abc123");
+  assertEquals(r.needsBuild, true);
+  assertEquals(r.dockerfile, "/cache/abc123/Dockerfile");
 });
 
 Deno.test("resolveImageRef: string image passes through", () => {
-  const r = resolveImageRef({ version: 1, image: "node:22" }, "/p", "default");
+  const r = resolveImageRef({ version: 1, image: "node:22" }, "/p", { ref: "default" });
   assertEquals(r.ref, "node:22");
   assertEquals(r.needsBuild, false);
 });
@@ -36,7 +49,7 @@ Deno.test("resolveImageRef: dockerfile triggers build with project tag", () => {
   const r = resolveImageRef(
     { version: 1, image: { dockerfile: ".devcontainer/Dockerfile" } },
     "/Users/me/myproj",
-    "default",
+    { ref: "default" },
   );
   assertEquals(r.ref, "myproj-sandbox");
   assertEquals(r.needsBuild, true);

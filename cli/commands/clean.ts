@@ -16,7 +16,7 @@ import {
 } from "../lib/container.ts";
 import { resolveConfig } from "../lib/config.ts";
 import { resolveImageRef } from "../lib/container.ts";
-import { builtInBaseImage } from "../lib/baseimage.ts";
+import { builtInImage } from "../lib/baseimage.ts";
 
 export interface CleanOptions {
   cwd: string;
@@ -29,7 +29,8 @@ export async function runClean(opts: CleanOptions): Promise<number> {
   const run = opts.run ?? realRunner;
   const resolved = await resolveConfig({ cwd: opts.cwd });
   const projectTag = projectImageTag(resolved.workspaceDir);
-  const image = resolveImageRef(resolved.config, resolved.workspaceDir, builtInBaseImage());
+  const base = await builtInImage();
+  const image = resolveImageRef(resolved.config, resolved.workspaceDir, { ref: base.ref });
 
   // Match containers by image — both the project tag (for ejected/built
   // images) and the active image ref.

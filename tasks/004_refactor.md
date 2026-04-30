@@ -55,11 +55,17 @@ Claude to inspect this and rewrite the config."
 
 If both files exist, `.apfelkaefig.json` wins; `akf doctor` warns.
 
-**Built-in base image: registry-hosted, digest-pinned.** `ghcr.io/apfelkaefig/base`, arm64-only,
-single-platform. Each `akf` binary embeds the exact `sha256:...` of its base image — no skew, no
-surprise upgrades. Re-pulled only when the binary updates (via brew). Drive-by users need only Apple
-`container` installed; no Docker required for the simple path. Custom Dockerfiles still need Docker
-locally (because Apple `container`'s builder has DNS bugs in v0.9).
+**Built-in base image: embedded Dockerfile (MVP), registry-hosted later.** The `image/Dockerfile` is
+embedded into the `akf` binary at compile time via `deno compile --include ./image`. On first
+`akf up`, it is materialized into `~/.cache/apfelkaefig/base/<hash>/Dockerfile` and built locally
+with Docker; tagged `apfelkaefig-base:<hash>` where `<hash>` is the first 12 hex chars of the
+Dockerfile's SHA-256. Cache invalidates automatically when the Dockerfile changes. arm64-only.
+
+This MVP path requires Docker on the host (Apple `container`'s v0.9 builder has DNS bugs that break
+apt/curl during build). The original plan of "drive-by needs only Apple `container`, no Docker" is
+**deferred** — registry publishing at `ghcr.io/apfelkaefig/base` with a digest baked into the binary
+will land later. `AKF_BASE_IMAGE=<ref>` overrides the embedded path for development. See
+`image/README.md` for the full state.
 
 **Image scope (kept minimal):** Debian slim + claude + git + node + jq + ripgrep + curl + fd-find +
 tree + vim + gh. Codex, Gemini CLI, Python, etc. are BYO via custom Dockerfile
@@ -148,8 +154,8 @@ with no config = built-in image + claude default command.
   via positional args (`akf up bash`, `akf up -- claude --resume`).
 - If image missing and `image.dockerfile` is set: auto-build (calls `akf build` internally with a
   one-line notice).
-- If image missing and built-in is required: pull from registry by digest. Fail with a clear error
-  if offline; offer `akf build --from-dockerfile <path>` as the escape hatch.
+- If image missing and built-in is required: build from the embedded Dockerfile (one-time, ~5 min).
+  Future: pull from registry by digest when ghcr.io publishing lands.
 - Auto-injects `OP_SERVICE_ACCOUNT_TOKEN` from keychain unless disabled.
 - Forwards SIGINT cleanly so Ctrl+C terminates the container.
 - Preserves stdin/pty for interactive Claude.
@@ -365,10 +371,14 @@ suggesting `akf eject --devcontainer`.
 
 **Compiled dogfood (against this repo):**
 
-1. `deno task compile` produces `dist/akf` with embedded base image digest.
-2. `./dist/akf doctor` — all checks pass.
-3. `./dist/akf up` from this repo's root — container starts, claude available, `pwd` shows
-   `/workspaces/apfelkaefig`. Quit.
+1. `deno task compile` produces `dist/akf` with the embedded base Dockerfile bundled (via
+   `--include ./image`).
+2. `./dist/akf doctor` — all checks pass; docker reports as required because the built-in base is
+   built locally; base image reports "not cached (will build on first use)" or "cached" depending on
+   prior runs.
+3. `./dist/akf up` from this repo's root — first run prints "building (one-time, ~5 min)…" and
+   produces `apfelkaefig-base:<hash>`; subsequent runs skip the build. Container starts, claude
+   available, `pwd` shows `/workspaces/apfelkaefig`. Quit.
 4. `./dist/akf eject --devcontainer` — produces `.devcontainer/devcontainer.json` valid against the
    devcontainer spec; equivalent to current state. Re-running is idempotent.
 5. `./dist/akf eject --bash` — produces `build.sh` + `start.sh` that boot the same container without
@@ -383,8 +393,9 @@ suggesting `akf eject --devcontainer`.
    `.devcontainer/devcontainer.json`: `akf doctor` warns; `akf up` honors the apfelkaefig file.
 10. **Schema validation** — write an `.apfelkaefig.json` with an unknown top-level key. `akf up`
     fails with a schema error pointing at the offending key.
-11. **Offline pull** — disable network, run `akf up` in a fresh project. Fails with a clear error
-    mentioning the missing built-in image and suggesting `akf build --from-dockerfile`.
+11. **Embedded Dockerfile cache** — delete `~/.cache/apfelkaefig/base/`, run `akf up`. The cache dir
+    is recreated, the Dockerfile materialized, and the build runs again. Re-running `akf up` after
+    that is fast (no rebuild).
 
 **Migration path verification:**
 

@@ -6,7 +6,7 @@
     "fmt": "deno fmt",
     "lint": "deno lint",
     "check": "deno check cli/main.ts",
-    "compile": "deno compile -A --include ./templates --include ./schema --include ./deno.json --output dist/akf cli/main.ts"
+    "compile": "deno compile -A --include ./templates --include ./schema --include ./image --include ./deno.json --output dist/akf cli/main.ts"
   },
   "imports": {
     "@std/cli": "jsr:@std/cli@^1.0.9",

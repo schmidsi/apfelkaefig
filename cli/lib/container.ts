@@ -135,15 +135,22 @@ export function projectImageTag(workspaceHostPath: string): string {
   return `${trimmed || "akf"}-sandbox`;
 }
 
-// Resolve which image to run given the config + a fallback default (e.g. the
-// pinned built-in image ref). Returns the tag/ref the runner should use, plus
-// a hint about whether it needs a local build.
+// Resolve which image to run given the config + the built-in default. The
+// built-in is either a registry ref (pulled when missing) or an embedded
+// Dockerfile (built locally when missing). Returns the tag/ref the runner
+// should use plus a hint about how to obtain it.
 export function resolveImageRef(
   config: ApfelkaefigConfig,
   workspaceHostPath: string,
-  builtInDefault: string,
+  builtIn: { ref: string; dockerfile?: string },
 ): { ref: string; needsBuild: boolean; dockerfile?: string } {
-  if (config.image === undefined) return { ref: builtInDefault, needsBuild: false };
+  if (config.image === undefined) {
+    return {
+      ref: builtIn.ref,
+      needsBuild: builtIn.dockerfile !== undefined,
+      dockerfile: builtIn.dockerfile,
+    };
+  }
   if (typeof config.image === "string") return { ref: config.image, needsBuild: false };
   return {
     ref: projectImageTag(workspaceHostPath),

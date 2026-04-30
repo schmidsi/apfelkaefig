@@ -1,7 +1,7 @@
 // `akf up` — canonical entry point. Resolves config, picks image, ensures
 // it's available, and execs `container run …`.
 
-import { builtInBaseImage } from "../lib/baseimage.ts";
+import { builtInImage, materializeEmbeddedDockerfile } from "../lib/baseimage.ts";
 import {
   buildRunArgs,
   containerVersion,
@@ -55,7 +55,20 @@ export async function runUp(opts: UpOptions): Promise<number> {
 
   for (const w of resolved.warnings) console.error(`warning: ${w}`);
 
-  const image = resolveImageRef(resolved.config, resolved.workspaceDir, builtInBaseImage());
+  // Resolve the built-in base image. When `image/Dockerfile` is embedded in
+  // the binary, materialize it into a content-hashed cache dir so docker has
+  // a build context. AKF_BASE_IMAGE override skips the embedded path.
+  const base = await builtInImage();
+  let baseDockerfilePath: string | undefined;
+  if (base.embedded) {
+    baseDockerfilePath = await materializeEmbeddedDockerfile(base);
+  }
+
+  const image = resolveImageRef(resolved.config, resolved.workspaceDir, {
+    ref: base.ref,
+    dockerfile: baseDockerfilePath,
+  });
+  const isBuiltInBuild = resolved.config.image === undefined && image.needsBuild;
 
   // Ensure container system is up.
   await ensureContainerSystem(run);
@@ -63,9 +76,15 @@ export async function runUp(opts: UpOptions): Promise<number> {
   // Image presence check + recovery path.
   if (!(await imageExists(image.ref, run))) {
     if (image.needsBuild) {
-      console.error(
-        `akf up: image '${image.ref}' missing — building from ${image.dockerfile}…`,
-      );
+      if (isBuiltInBuild) {
+        console.error(
+          `akf up: built-in base image '${image.ref}' not cached — building (one-time, ~5 min)…`,
+        );
+      } else {
+        console.error(
+          `akf up: image '${image.ref}' missing — building from ${image.dockerfile}…`,
+        );
+      }
       const buildCode = await runBuild({
         cwd: resolved.workspaceDir,
         dockerfile: image.dockerfile!,

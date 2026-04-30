@@ -14,8 +14,11 @@ import { join } from "@std/path";
 import { ensureDir } from "@std/fs";
 import { writeIfMissing } from "../lib/fs.ts";
 import { effective, resolveConfig, type ResolvedConfig } from "../lib/config.ts";
-import { builtInBaseImage } from "../lib/baseimage.ts";
 import { projectImageTag } from "../lib/container.ts";
+
+// The embedded built-in Dockerfile, written into the project when ejecting
+// without an explicit image. Same content as `image/Dockerfile`.
+const EMBEDDED_BASE_DOCKERFILE_URL = new URL("../../image/Dockerfile", import.meta.url);
 
 export type EjectTarget = "devcontainer" | "bash";
 
@@ -57,7 +60,8 @@ async function ejectDevcontainer(
   } else if (c.image && typeof c.image === "object" && "dockerfile" in c.image) {
     dc.build = { dockerfile: relative(c.image.dockerfile) };
   } else {
-    dc.image = builtInBaseImage();
+    // Built-in case: ship the embedded Dockerfile so VS Code can build it.
+    dc.build = { dockerfile: "Dockerfile" };
   }
 
   if (c.env && Object.keys(c.env).length > 0) {
@@ -80,13 +84,13 @@ async function ejectDevcontainer(
   await writeOrForce(dcPath, out, opts.force);
   console.log(`  wrote ${rel(opts.cwd, dcPath)}`);
 
-  if (typeof c.image === "object" && c.image && "dockerfile" in c.image) {
+  if (typeof c.image === "string") {
+    // Registry image — no Dockerfile to write.
+  } else if (c.image && typeof c.image === "object" && "dockerfile" in c.image) {
     // Copy/keep the user's Dockerfile in place — nothing to do.
   } else {
-    // Pull the base Dockerfile too so VS Code can build offline.
-    const dockerfile = await Deno.readTextFile(
-      new URL("../../templates/.devcontainer/Dockerfile", import.meta.url),
-    );
+    // Built-in case: copy the embedded base Dockerfile so VS Code can build it.
+    const dockerfile = await Deno.readTextFile(EMBEDDED_BASE_DOCKERFILE_URL);
     const dfPath = join(opts.cwd, ".devcontainer/Dockerfile");
     if (await writeOrForce(dfPath, dockerfile, opts.force)) {
       console.log(`  wrote ${rel(opts.cwd, dfPath)}`);
@@ -105,9 +109,29 @@ async function ejectBash(
   const e = effective(resolved);
 
   const tag = projectImageTag(opts.cwd);
-  const useDockerfile = typeof c.image === "object" && c.image && "dockerfile" in c.image
-    ? c.image.dockerfile
-    : null;
+
+  // Three cases for "what image does start.sh launch?"
+  //   1. config.image is a registry string → use it directly, no build.sh.
+  //   2. config.image is { dockerfile } → use that Dockerfile, write build.sh.
+  //   3. no image set (built-in) → write the embedded Dockerfile to
+  //      .devcontainer/Dockerfile, use the project tag, write build.sh.
+  let dockerfile: string | null = null;
+  let imageRef: string;
+  if (typeof c.image === "string") {
+    imageRef = c.image;
+  } else if (c.image && typeof c.image === "object" && "dockerfile" in c.image) {
+    dockerfile = c.image.dockerfile;
+    imageRef = tag;
+  } else {
+    const embedded = await Deno.readTextFile(EMBEDDED_BASE_DOCKERFILE_URL);
+    const dfPath = join(opts.cwd, ".devcontainer/Dockerfile");
+    await ensureDir(join(opts.cwd, ".devcontainer"));
+    if (await writeOrForce(dfPath, embedded, opts.force)) {
+      console.log(`  wrote ${rel(opts.cwd, dfPath)}`);
+    }
+    dockerfile = ".devcontainer/Dockerfile";
+    imageRef = tag;
+  }
 
   const startSh = renderStart({
     user: e.user,
@@ -117,7 +141,7 @@ async function ejectBash(
     command: e.command,
     extraMounts: c.mounts ?? [],
     extraEnv: c.env ?? {},
-    image: typeof c.image === "string" ? c.image : useDockerfile ? tag : builtInBaseImage(),
+    image: imageRef,
     onepasswordEnabled: c.secrets?.onepassword !== false,
   });
 
@@ -125,11 +149,8 @@ async function ejectBash(
   await writeOrForce(startPath, startSh, opts.force, { mode: 0o755 });
   console.log(`  wrote ${rel(opts.cwd, startPath)}`);
 
-  if (useDockerfile) {
-    const buildSh = renderBuild({
-      tag,
-      dockerfile: useDockerfile,
-    });
+  if (dockerfile) {
+    const buildSh = renderBuild({ tag, dockerfile });
     const buildPath = join(opts.cwd, "build.sh");
     await writeOrForce(buildPath, buildSh, opts.force, { mode: 0o755 });
     console.log(`  wrote ${rel(opts.cwd, buildPath)}`);
