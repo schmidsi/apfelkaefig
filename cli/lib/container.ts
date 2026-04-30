@@ -69,12 +69,17 @@ export function buildRunArgs(
   // Workspace mount.
   args.push("-v", `${input.workspaceHostPath}:${sub(e.workspaceFolder)}`);
 
-  // Default mounts: ~/.claude RW, ~/Downloads RO, ~/Desktop RO. Skip when the
-  // host source doesn't exist (mirrors the pre-refactor start.sh behavior).
+  // Default mounts. ~/.claude is always RW (login + history persistence).
+  // Downloads/Desktop are tier-2/tier-3 conveniences only — drive-by mode
+  // (no config) skips them so an ad-hoc `akf up` in a random dir doesn't
+  // expose the user's Desktop. Sources that don't exist are silently skipped.
+  const isDriveBy = input.resolved.source.kind === "defaults";
   if (home) {
     pushMountIfExists(args, `${home}/.claude`, `/home/${e.user}/.claude`, false);
-    pushMountIfExists(args, `${home}/Downloads`, `/home/${e.user}/Downloads`, true);
-    pushMountIfExists(args, `${home}/Desktop`, `/home/${e.user}/Desktop`, true);
+    if (!isDriveBy) {
+      pushMountIfExists(args, `${home}/Downloads`, `/home/${e.user}/Downloads`, true);
+      pushMountIfExists(args, `${home}/Desktop`, `/home/${e.user}/Desktop`, true);
+    }
   }
 
   // Extra mounts from config.

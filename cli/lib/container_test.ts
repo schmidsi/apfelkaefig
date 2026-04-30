@@ -123,6 +123,43 @@ Deno.test("buildRunArgs: respects user + workspaceFolder overrides", () => {
   assertEquals(out.args[w + 1], "/code");
 });
 
+Deno.test("buildRunArgs: drive-by mode skips ~/Downloads and ~/Desktop", async () => {
+  const home = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${home}/.claude`);
+    await Deno.mkdir(`${home}/Downloads`);
+    await Deno.mkdir(`${home}/Desktop`);
+
+    const driveBy = buildRunArgs({
+      resolved: resolved({}), // source.kind === "defaults"
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    const driveByMounts = driveBy.args.filter((a) => a.startsWith(home));
+    assertEquals(driveByMounts, [`${home}/.claude:/home/node/.claude`]);
+
+    const tier2: ResolvedConfig = {
+      ...resolved({}),
+      source: { kind: "apfelkaefig", path: "/p/.apfelkaefig.json", dir: "/p", raw: { version: 1 } },
+    };
+    const tier2Args = buildRunArgs({
+      resolved: tier2,
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    const tier2Mounts = tier2Args.args.filter((a) => a.startsWith(home));
+    assertEquals(tier2Mounts, [
+      `${home}/.claude:/home/node/.claude`,
+      `${home}/Downloads:/home/node/Downloads:ro`,
+      `${home}/Desktop:/home/node/Desktop:ro`,
+    ]);
+  } finally {
+    await Deno.remove(home, { recursive: true });
+  }
+});
+
 Deno.test("buildRunArgs: applies resources caps", () => {
   const out = buildRunArgs({
     resolved: resolved({ resources: { cpus: 4, memory: "8G" } }),
