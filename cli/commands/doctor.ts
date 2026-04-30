@@ -1,7 +1,13 @@
 // `akf doctor` — preflight checks. Exit code is 0 when everything OK or only
 // warnings, 1 when at least one hard-fail check fails.
 
-import { containerVersion, imageExists, realRunner, type Runner } from "../lib/container.ts";
+import {
+  containerVersion,
+  dockerStatus,
+  imageExists,
+  realRunner,
+  type Runner,
+} from "../lib/container.ts";
 import { ConfigError, findConfig, resolveConfig } from "../lib/config.ts";
 import { findOpToken, TruncatedTokenError } from "../lib/secrets.ts";
 import { builtInImage } from "../lib/baseimage.ts";
@@ -107,15 +113,25 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
   const builtInNeedsBuild = !!base.embedded && resolved?.config.image === undefined;
   const dockerNeeded = projectDockerfile || builtInNeedsBuild;
   if (dockerNeeded) {
-    const dr = await run("docker", ["--version"], { stdout: "null", stderr: "null" });
+    const ds = await dockerStatus(run);
     const reason = projectDockerfile
       ? "config has image.dockerfile"
       : "built-in base image is built locally (ghcr.io publishing deferred)";
-    checks.push({
-      label: "docker",
-      severity: dr.code === 0 ? "ok" : "fail",
-      detail: dr.code === 0 ? `found (${reason})` : `required (${reason}) but not found on PATH`,
-    });
+    if (ds === "ok") {
+      checks.push({ label: "docker", severity: "ok", detail: `running (${reason})` });
+    } else if (ds === "missing") {
+      checks.push({
+        label: "docker",
+        severity: "fail",
+        detail: `required (${reason}) but not found on PATH`,
+      });
+    } else {
+      checks.push({
+        label: "docker",
+        severity: "fail",
+        detail: `installed but daemon not running — start with: open -a Docker`,
+      });
+    }
   } else {
     checks.push({
       label: "docker",

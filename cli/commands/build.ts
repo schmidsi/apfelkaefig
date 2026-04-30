@@ -4,6 +4,7 @@
 
 import { dirname, isAbsolute, resolve } from "@std/path";
 import {
+  dockerStatus,
   projectImageTag,
   pullImageHttp,
   realRunner,
@@ -58,6 +59,25 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
   tag ??= projectImageTag(opts.cwd);
   const dockerfilePath = isAbsolute(dockerfile) ? dockerfile : resolve(opts.cwd, dockerfile);
   const buildContext = dirname(dockerfilePath);
+
+  // Preflight Docker before invoking `docker build` so we can emit a useful
+  // suggestion instead of the raw socket error from the docker CLI.
+  const ds = await dockerStatus(run);
+  if (ds === "missing") {
+    console.error(
+      "akf build: docker not found on PATH. Install Docker Desktop:\n" +
+        "           https://docs.docker.com/desktop/install/mac-install/",
+    );
+    return 1;
+  }
+  if (ds === "daemon-down") {
+    console.error(
+      "akf build: Docker is installed but the daemon isn't running.\n" +
+        "           Start it with:  open -a Docker\n" +
+        "           Then retry the same command.",
+    );
+    return 1;
+  }
 
   console.error(`akf build: building '${tag}' from ${dockerfilePath}`);
   const dockerBuild = await run("docker", [
