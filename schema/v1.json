@@ -38,15 +38,21 @@
     },
     "mounts": {
       "type": "array",
-      "description": "Bind mounts in addition to the defaults (workspace + ~/.claude RW + ~/Downloads RO + ~/Desktop RO).",
+      "description": "Mounts in addition to the defaults (workspace + ~/.claude RW + ~/Downloads RO + ~/Desktop RO). Bind mounts by default; named volumes via type: \"volume\".",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["source", "target"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["bind", "volume"],
+            "default": "bind",
+            "description": "Mount kind. \"bind\" (default) maps a host path. \"volume\" uses an Apple `container` named volume; akf creates it idempotently before run."
+          },
           "source": {
             "type": "string",
-            "description": "Host path. Supports ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}."
+            "description": "For bind: host path; supports ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}. For volume: literal volume name matching ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ (no substitutions)."
           },
           "target": {
             "type": "string",

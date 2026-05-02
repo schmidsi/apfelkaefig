@@ -1,5 +1,11 @@
-import { assert, assertEquals } from "@std/assert";
-import { buildRunArgs, dockerStatus, projectImageTag, resolveImageRef } from "./container.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import {
+  buildRunArgs,
+  dockerStatus,
+  ensureVolumes,
+  projectImageTag,
+  resolveImageRef,
+} from "./container.ts";
 import type { CmdResult, Runner } from "./container.ts";
 import type { ResolvedConfig } from "./config.ts";
 
@@ -195,7 +201,12 @@ Deno.test("buildRunArgs: dedupes mount targets (config + defaults collision)", a
     // defaults block would also emit. Without dedupe we'd send `-v` twice
     // and Apple `container` virtiofs returns EBUSY.
     const cfg: ResolvedConfig = {
-      source: { kind: "devcontainer", path: "/p/.devcontainer/devcontainer.json", dir: "/p", raw: {} },
+      source: {
+        kind: "devcontainer",
+        path: "/p/.devcontainer/devcontainer.json",
+        dir: "/p",
+        raw: {},
+      },
       workspaceDir: "/Users/me/proj",
       config: {
         version: 1,
@@ -217,6 +228,89 @@ Deno.test("buildRunArgs: dedupes mount targets (config + defaults collision)", a
   } finally {
     await Deno.remove(home, { recursive: true });
   }
+});
+
+Deno.test("buildRunArgs: volume mount renders as -v name:tgt without host-path check", () => {
+  const out = buildRunArgs({
+    resolved: {
+      source: { kind: "apfelkaefig", path: "/p/.apfelkaefig.json", dir: "/p", raw: { version: 1 } },
+      workspaceDir: "/p",
+      config: {
+        version: 1,
+        mounts: [
+          { type: "volume", source: "tg-auth", target: "/data" },
+          { type: "volume", source: "tg-state", target: "/state", readonly: true },
+        ],
+      },
+      warnings: [],
+    },
+    workspaceHostPath: "/p",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+  });
+  const dataIdx = out.args.indexOf("tg-auth:/data");
+  assert(dataIdx > 0, "volume mount missing");
+  assertEquals(out.args[dataIdx - 1], "-v");
+  const stateIdx = out.args.indexOf("tg-state:/state:ro");
+  assert(stateIdx > 0, "ro volume mount missing");
+});
+
+Deno.test("ensureVolumes: idempotent — swallows 'already exists'", async () => {
+  const calls: { cmd: string; args: string[] }[] = [];
+  const run: Runner = (cmd, args) => {
+    calls.push({ cmd, args });
+    return Promise.resolve({
+      code: 1,
+      stdout: "",
+      stderr: "Error: volume 'tg-auth' already exists",
+    });
+  };
+  await ensureVolumes(
+    [{ type: "volume", source: "tg-auth", target: "/x" }],
+    run,
+  );
+  assertEquals(calls, [{ cmd: "container", args: ["volume", "create", "tg-auth"] }]);
+});
+
+Deno.test("ensureVolumes: dedupes by name, skips bind mounts", async () => {
+  const calls: { cmd: string; args: string[] }[] = [];
+  const run: Runner = (cmd, args) => {
+    calls.push({ cmd, args });
+    return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+  };
+  await ensureVolumes(
+    [
+      { type: "volume", source: "v1", target: "/a" },
+      { type: "bind", source: "/host", target: "/b" },
+      { type: "volume", source: "v1", target: "/c" },
+      { type: "volume", source: "v2", target: "/d" },
+    ],
+    run,
+  );
+  assertEquals(calls.length, 2);
+  assertEquals(calls[0].args, ["volume", "create", "v1"]);
+  assertEquals(calls[1].args, ["volume", "create", "v2"]);
+});
+
+Deno.test("ensureVolumes: surfaces real failures (non-'exists' stderr)", async () => {
+  const run: Runner = () => Promise.resolve({ code: 1, stdout: "", stderr: "permission denied" });
+  await assertRejects(
+    () => ensureVolumes([{ type: "volume", source: "v1", target: "/x" }], run),
+    Error,
+    "failed to create volume 'v1'",
+  );
+});
+
+Deno.test("ensureVolumes: no-op for undefined / empty / no-volume mounts", async () => {
+  const calls: { cmd: string; args: string[] }[] = [];
+  const run: Runner = (cmd, args) => {
+    calls.push({ cmd, args });
+    return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+  };
+  await ensureVolumes(undefined, run);
+  await ensureVolumes([], run);
+  await ensureVolumes([{ source: "/host", target: "/x" }], run);
+  assertEquals(calls.length, 0);
 });
 
 Deno.test("buildRunArgs: applies resources caps", () => {

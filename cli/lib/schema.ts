@@ -5,6 +5,7 @@ export const SCHEMA_VERSION = 1;
 export const SCHEMA_URL = "https://apfelkaefig.com/schema/v1.json";
 
 export interface MountConfig {
+  type?: "bind" | "volume";
   source: string;
   target: string;
   readonly?: boolean;

@@ -77,6 +77,70 @@ Deno.test("validate accepts mounts and rejects bad ones", () => {
   );
 });
 
+Deno.test("validate accepts type=volume with valid name", () => {
+  const c = validate({
+    version: 1,
+    mounts: [{ type: "volume", source: "tg-auth", target: "/x" }],
+  });
+  assertEquals(c.mounts?.[0].type, "volume");
+});
+
+Deno.test("validate rejects unknown mount type", () => {
+  assertThrows(
+    () => validate({ version: 1, mounts: [{ type: "tmpfs", source: "x", target: "/x" }] }),
+    ConfigError,
+    "must be 'bind' or 'volume'",
+  );
+});
+
+Deno.test("validate rejects invalid volume names", () => {
+  assertThrows(
+    () => validate({ version: 1, mounts: [{ type: "volume", source: "foo bar", target: "/x" }] }),
+    ConfigError,
+    "valid volume name",
+  );
+  assertThrows(
+    () => validate({ version: 1, mounts: [{ type: "volume", source: "-leading", target: "/x" }] }),
+    ConfigError,
+    "valid volume name",
+  );
+});
+
+Deno.test("validate rejects substitutions in volume source", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        mounts: [{ type: "volume", source: "${localEnv:HOME}", target: "/x" }],
+      }),
+    ConfigError,
+    "cannot contain ${...} substitutions",
+  );
+});
+
+Deno.test("resolveConfig: round-trips type=volume from devcontainer mount strings", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.mkdir(join(dir, ".devcontainer"));
+    await Deno.writeTextFile(
+      join(dir, ".devcontainer", "devcontainer.json"),
+      JSON.stringify({
+        mounts: [
+          "source=tg-auth,target=/data,type=volume",
+          "source=foo,target=/x,type=volume,readonly",
+        ],
+      }),
+    );
+    const r = await resolveConfig({ cwd: dir });
+    assertEquals(r.config.mounts?.[0], { type: "volume", source: "tg-auth", target: "/data" });
+    assertEquals(r.config.mounts?.[1], {
+      type: "volume",
+      source: "foo",
+      target: "/x",
+      readonly: true,
+    });
+  });
+});
+
 Deno.test("validate enforces resources shape", () => {
   validate({ version: 1, resources: { cpus: 4, memory: "8G" } });
   assertThrows(

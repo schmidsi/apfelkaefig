@@ -8,8 +8,11 @@
 
   // Extra mounts beyond the defaults
   // (workspace + ~/.claude RW + ~/Downloads RO + ~/Desktop RO).
+  // Bind by default; type: "volume" uses a named Apple `container` volume,
+  // pre-created by `akf up` (use this for state that must stay off the host).
   // "mounts": [
-  //   { "source": "${localEnv:HOME}/.config/gh", "target": "/home/node/.config/gh" }
+  //   { "source": "${localEnv:HOME}/.config/gh", "target": "/home/node/.config/gh" },
+  //   { "type": "volume", "source": "my-cache", "target": "/cache" }
   // ],
 
   // Env injected at run time. Substitution: ${localEnv:VAR},

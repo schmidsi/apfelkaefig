@@ -3,7 +3,7 @@
 // the subprocess; built-in `realRunner` shells out for real.
 
 import { basename } from "@std/path";
-import { type ApfelkaefigConfig, DEFAULTS } from "./schema.ts";
+import { type ApfelkaefigConfig, DEFAULTS, type MountConfig } from "./schema.ts";
 import { effective, type ResolvedConfig, substitute } from "./config.ts";
 
 export type CmdResult = { code: number; stdout: string; stderr: string };
@@ -87,8 +87,14 @@ export function buildRunArgs(
   // Extra mounts from config first — explicit user intent wins over defaults
   // when targets collide (e.g. devcontainer.json that already maps ~/.claude).
   for (const m of c.mounts ?? []) {
-    const src = sub(m.source);
     const tgt = sub(m.target);
+    if (m.type === "volume") {
+      // Volume name is literal — no substitution, no host-path check. The
+      // volume itself is created by ensureVolumes() before `container run`.
+      pushMount(m.source, tgt, !!m.readonly);
+      continue;
+    }
+    const src = sub(m.source);
     if (!pathExistsSync(src)) {
       console.error(`warning: skipping mount ${src} -> ${tgt} (source not found)`);
       continue;
@@ -196,6 +202,31 @@ export function resolveImageRef(
 export { DEFAULTS };
 
 // --- container subcommand wrappers ---
+
+// Idempotently create any named volumes referenced by `mounts[].type=volume`.
+// Apple `container volume create` errors on a re-create; we treat any non-zero
+// exit whose stderr mentions "exist" as success so akf up stays idempotent.
+export async function ensureVolumes(
+  mounts: MountConfig[] | undefined,
+  run: Runner = realRunner,
+): Promise<void> {
+  if (!mounts) return;
+  const seen = new Set<string>();
+  for (const m of mounts) {
+    if (m.type !== "volume") continue;
+    if (seen.has(m.source)) continue;
+    seen.add(m.source);
+    const r = await run("container", ["volume", "create", m.source], {
+      stdout: "null",
+      stderr: "piped",
+    });
+    if (r.code !== 0 && !/exist/i.test(r.stderr)) {
+      throw new Error(
+        `failed to create volume '${m.source}' (exit ${r.code}): ${r.stderr.trim()}`,
+      );
+    }
+  }
+}
 
 export async function ensureContainerSystem(run: Runner = realRunner): Promise<void> {
   const status = await run("container", ["system", "status"], { stdout: "null", stderr: "null" });

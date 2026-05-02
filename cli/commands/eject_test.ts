@@ -1,0 +1,82 @@
+import { assert, assertEquals } from "@std/assert";
+import { join } from "@std/path";
+import { runEject } from "./eject.ts";
+
+async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
+  const dir = await Deno.makeTempDir({ prefix: "akf-eject-test-" });
+  try {
+    await fn(dir);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+}
+
+Deno.test("eject --bash: emits volume create + -v flag without [[ -e ]] guard", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        image: "node:22",
+        mounts: [
+          { type: "volume", source: "tg-auth", target: "/auth" },
+          { type: "volume", source: "tg-state", target: "/state", readonly: true },
+        ],
+      }),
+    );
+    const code = await runEject({ cwd: dir, target: "bash" });
+    assertEquals(code, 0);
+    const start = await Deno.readTextFile(join(dir, "start.sh"));
+
+    // Pre-create lines, deduped, idempotent.
+    assert(
+      start.includes("container volume create tg-auth >/dev/null 2>&1 || true"),
+      "tg-auth volume create line missing",
+    );
+    assert(
+      start.includes("container volume create tg-state >/dev/null 2>&1 || true"),
+      "tg-state volume create line missing",
+    );
+
+    // -v flags emitted without an existence guard.
+    assert(
+      start.includes(`mount_flags+=(-v "tg-auth:/auth")`),
+      "tg-auth -v flag missing or wrapped",
+    );
+    assert(
+      start.includes(`mount_flags+=(-v "tg-state:/state:ro")`),
+      "tg-state -v flag missing or wrapped",
+    );
+
+    // Sanity: volume mount is NOT inside an `[[ -e ... ]]` block — search for
+    // the line and confirm no `if [[ -e` immediately precedes it.
+    const lines = start.split("\n");
+    const volIdx = lines.findIndex((l) => l.includes(`tg-auth:/auth`));
+    assert(volIdx > 0);
+    assert(
+      !lines[volIdx - 1].includes("[[ -e"),
+      "volume mount should not be guarded by [[ -e ]]",
+    );
+  });
+});
+
+Deno.test("eject --devcontainer: mountObjToString emits type=volume", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        image: "node:22",
+        mounts: [{ type: "volume", source: "tg-auth", target: "/auth" }],
+      }),
+    );
+    const code = await runEject({ cwd: dir, target: "devcontainer" });
+    assertEquals(code, 0);
+    const dc = JSON.parse(
+      await Deno.readTextFile(join(dir, ".devcontainer", "devcontainer.json")),
+    );
+    const volumeMount = (dc.mounts as string[]).find((m) => m.includes("tg-auth"));
+    assert(volumeMount, "tg-auth mount missing from devcontainer.json");
+    assert(volumeMount.includes("type=volume"), `expected type=volume, got: ${volumeMount}`);
+  });
+});

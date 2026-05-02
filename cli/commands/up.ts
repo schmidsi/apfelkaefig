@@ -6,6 +6,7 @@ import {
   buildRunArgs,
   containerVersion,
   ensureContainerSystem,
+  ensureVolumes,
   imageExists,
   pullImage,
   realRunner,
@@ -104,6 +105,15 @@ export async function runUp(opts: UpOptions): Promise<number> {
         return pullRes.code;
       }
     }
+  }
+
+  // Pre-create any named volumes referenced by the config so `container run`
+  // doesn't 404 on the first reference.
+  try {
+    await ensureVolumes(resolved.config.mounts, run);
+  } catch (err) {
+    console.error(`akf up: ${(err as Error).message}`);
+    return 1;
   }
 
   // 1Password injection.

@@ -166,7 +166,7 @@ interface StartTemplateInput {
   cpus: number;
   memory: string;
   command: string[];
-  extraMounts: { source: string; target: string; readonly?: boolean }[];
+  extraMounts: { type?: "bind" | "volume"; source: string; target: string; readonly?: boolean }[];
   extraEnv: Record<string, string>;
   image: string;
   onepasswordEnabled: boolean;
@@ -186,6 +186,17 @@ function renderStart(t: StartTemplateInput): string {
   lines.push("fi");
   lines.push("");
 
+  // Pre-create named volumes (idempotent).
+  const volumeNames = Array.from(
+    new Set(t.extraMounts.filter((m) => m.type === "volume").map((m) => m.source)),
+  );
+  if (volumeNames.length > 0) {
+    for (const name of volumeNames) {
+      lines.push(`container volume create ${shellQuote(name)} >/dev/null 2>&1 || true`);
+    }
+    lines.push("");
+  }
+
   // Build mount + env arrays.
   lines.push("mount_flags=()");
   const wsFolder = t.workspaceFolder.replaceAll(
@@ -201,11 +212,18 @@ function renderStart(t: StartTemplateInput): string {
     lines.push("fi");
   }
   for (const m of t.extraMounts) {
-    const src = m.source.replaceAll(
+    const tgt = m.target.replaceAll(
       "${localWorkspaceFolder}",
       "$WORKSPACE",
     ).replaceAll("${localWorkspaceFolderBasename}", "$WS_BASE");
-    const tgt = m.target.replaceAll(
+    if (m.type === "volume") {
+      // Volume name is literal — no host-path existence check.
+      lines.push(
+        `mount_flags+=(-v "${m.source}:${tgt}${m.readonly ? ":ro" : ""}")`,
+      );
+      continue;
+    }
+    const src = m.source.replaceAll(
       "${localWorkspaceFolder}",
       "$WORKSPACE",
     ).replaceAll("${localWorkspaceFolderBasename}", "$WS_BASE");
@@ -297,8 +315,11 @@ function defaultBindMountsFor(
   ];
 }
 
-function mountObjToString(m: { source: string; target: string; readonly?: boolean }): string {
-  const parts = [`source=${m.source}`, `target=${m.target}`, "type=bind"];
+function mountObjToString(
+  m: { type?: "bind" | "volume"; source: string; target: string; readonly?: boolean },
+): string {
+  const kind = m.type === "volume" ? "volume" : "bind";
+  const parts = [`source=${m.source}`, `target=${m.target}`, `type=${kind}`];
   if (m.readonly) parts.push("readonly");
   return parts.join(",");
 }

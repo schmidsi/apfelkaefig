@@ -149,6 +149,11 @@ function validateImage(v: unknown, sourcePath?: string): void {
   );
 }
 
+// Volume names follow Apple `container`'s convention — alphanumeric start,
+// then alphanumerics plus `_`, `.`, `-`. Substitutions are rejected because
+// volumes are referenced by literal name, not by interpolated path.
+const VOLUME_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+
 function validateMounts(v: unknown, sourcePath?: string): void {
   if (!Array.isArray(v)) throw new ConfigError("'mounts' must be an array", sourcePath);
   for (const [i, m] of v.entries()) {
@@ -163,12 +168,34 @@ function validateMounts(v: unknown, sourcePath?: string): void {
       );
     }
     for (const k of Object.keys(mr)) {
-      if (!["source", "target", "readonly"].includes(k)) {
+      if (!["type", "source", "target", "readonly"].includes(k)) {
         throw new ConfigError(`'mounts[${i}]' has unknown key '${k}'`, sourcePath);
       }
     }
     if ("readonly" in mr && typeof mr.readonly !== "boolean") {
       throw new ConfigError(`'mounts[${i}].readonly' must be a boolean`, sourcePath);
+    }
+    if ("type" in mr) {
+      if (mr.type !== "bind" && mr.type !== "volume") {
+        throw new ConfigError(
+          `'mounts[${i}].type' must be 'bind' or 'volume'`,
+          sourcePath,
+        );
+      }
+    }
+    if (mr.type === "volume") {
+      if (mr.source.includes("${")) {
+        throw new ConfigError(
+          `'mounts[${i}].source' is a volume name and cannot contain \${...} substitutions`,
+          sourcePath,
+        );
+      }
+      if (!VOLUME_NAME_RE.test(mr.source)) {
+        throw new ConfigError(
+          `'mounts[${i}].source' is not a valid volume name (must match ${VOLUME_NAME_RE})`,
+          sourcePath,
+        );
+      }
     }
   }
 }
@@ -330,7 +357,7 @@ function devcontainerToConfig(dc: Record<string, unknown>): ApfelkaefigConfig {
 }
 
 // Parse a devcontainer-style mount string: "source=...,target=...,type=bind,readonly".
-// We only care about source/target/readonly. Returns null for unparseable entries.
+// Preserves type=volume so round-trips through eject --devcontainer don't lose it.
 function parseDevcontainerMount(s: string): MountConfig | null {
   const parts: Record<string, string> = {};
   let readonly = false;
@@ -350,6 +377,7 @@ function parseDevcontainerMount(s: string): MountConfig | null {
   }
   if (!parts.source || !parts.target) return null;
   const m: MountConfig = { source: parts.source, target: parts.target };
+  if (parts.type === "volume") m.type = "volume";
   if (readonly) m.readonly = true;
   return m;
 }
