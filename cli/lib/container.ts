@@ -51,6 +51,10 @@ export interface RunFlagsInput {
   extraEnv?: Record<string, string>;
   // Override the default home dir (test seam).
   homeDir?: string;
+  // Allocate a TTY (`-t`). Defaults to whether stdin is a terminal — matches
+  // docker/podman. When false, Apple `container` 0.12 fails with a cryptic
+  // ENODEV ("Operation not supported by device") if `-t` is forced anyway.
+  tty?: boolean;
 }
 
 // Compute the argv for `container run …` minus the leading `container run`.
@@ -63,26 +67,25 @@ export function buildRunArgs(
   const subCtx = { workspaceFolder: input.workspaceHostPath, env: Deno.env.toObject() };
   const sub = (s: string) => substitute(s, subCtx);
 
-  const args: string[] = ["run", "-it", "--rm"];
+  const wantTty = input.tty ?? stdinIsTerminal();
+  const args: string[] = ["run", "--rm", wantTty ? "-it" : "-i"];
   args.push("--cpus", String(e.resources.cpus), "--memory", e.resources.memory);
 
+  // Track emitted mount targets so we don't pass duplicate `-v` for the same
+  // path — Apple `container`'s virtiofs rejects that with EBUSY (errno 16).
+  const emittedTargets = new Set<string>();
+  const pushMount = (src: string, tgt: string, readonly: boolean): boolean => {
+    if (emittedTargets.has(tgt)) return false;
+    args.push("-v", readonly ? `${src}:${tgt}:ro` : `${src}:${tgt}`);
+    emittedTargets.add(tgt);
+    return true;
+  };
+
   // Workspace mount.
-  args.push("-v", `${input.workspaceHostPath}:${sub(e.workspaceFolder)}`);
+  pushMount(input.workspaceHostPath, sub(e.workspaceFolder), false);
 
-  // Default mounts. ~/.claude is always RW (login + history persistence).
-  // Downloads/Desktop are tier-2/tier-3 conveniences only — drive-by mode
-  // (no config) skips them so an ad-hoc `akf up` in a random dir doesn't
-  // expose the user's Desktop. Sources that don't exist are silently skipped.
-  const isDriveBy = input.resolved.source.kind === "defaults";
-  if (home) {
-    pushMountIfExists(args, `${home}/.claude`, `/home/${e.user}/.claude`, false);
-    if (!isDriveBy) {
-      pushMountIfExists(args, `${home}/Downloads`, `/home/${e.user}/Downloads`, true);
-      pushMountIfExists(args, `${home}/Desktop`, `/home/${e.user}/Desktop`, true);
-    }
-  }
-
-  // Extra mounts from config.
+  // Extra mounts from config first — explicit user intent wins over defaults
+  // when targets collide (e.g. devcontainer.json that already maps ~/.claude).
   for (const m of c.mounts ?? []) {
     const src = sub(m.source);
     const tgt = sub(m.target);
@@ -90,8 +93,20 @@ export function buildRunArgs(
       console.error(`warning: skipping mount ${src} -> ${tgt} (source not found)`);
       continue;
     }
-    const flag = m.readonly ? `${src}:${tgt}:ro` : `${src}:${tgt}`;
-    args.push("-v", flag);
+    pushMount(src, tgt, !!m.readonly);
+  }
+
+  // Default mounts. ~/.claude is always RW (login + history persistence).
+  // Downloads/Desktop are tier-2/tier-3 conveniences only — drive-by mode
+  // (no config) skips them so an ad-hoc `akf up` in a random dir doesn't
+  // expose the user's Desktop. Sources that don't exist are silently skipped.
+  const isDriveBy = input.resolved.source.kind === "defaults";
+  if (home) {
+    pushMountIfExists(pushMount, `${home}/.claude`, `/home/${e.user}/.claude`, false);
+    if (!isDriveBy) {
+      pushMountIfExists(pushMount, `${home}/Downloads`, `/home/${e.user}/Downloads`, true);
+      pushMountIfExists(pushMount, `${home}/Desktop`, `/home/${e.user}/Desktop`, true);
+    }
   }
 
   // Container env: CLAUDE_CONFIG_DIR by default + config env + extras.
@@ -117,9 +132,14 @@ export function buildRunArgs(
   };
 }
 
-function pushMountIfExists(args: string[], src: string, tgt: string, readonly: boolean): void {
+function pushMountIfExists(
+  push: (src: string, tgt: string, readonly: boolean) => boolean,
+  src: string,
+  tgt: string,
+  readonly: boolean,
+): void {
   if (!pathExistsSync(src)) return;
-  args.push("-v", readonly ? `${src}:${tgt}:ro` : `${src}:${tgt}`);
+  push(src, tgt, readonly);
 }
 
 function pathExistsSync(p: string): boolean {
@@ -128,6 +148,14 @@ function pathExistsSync(p: string): boolean {
     return true;
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) return false;
+    return false;
+  }
+}
+
+function stdinIsTerminal(): boolean {
+  try {
+    return Deno.stdin.isTerminal();
+  } catch {
     return false;
   }
 }

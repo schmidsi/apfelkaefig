@@ -160,6 +160,65 @@ Deno.test("buildRunArgs: drive-by mode skips ~/Downloads and ~/Desktop", async (
   }
 });
 
+Deno.test("buildRunArgs: omits -t when tty=false (no-TTY callers)", () => {
+  const out = buildRunArgs({
+    resolved: resolved({}),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+    tty: false,
+  });
+  assertEquals(out.args.slice(0, 3), ["run", "--rm", "-i"]);
+  assert(!out.args.includes("-it"));
+  assert(!out.args.includes("-t"));
+});
+
+Deno.test("buildRunArgs: uses -it when tty=true", () => {
+  const out = buildRunArgs({
+    resolved: resolved({}),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+    tty: true,
+  });
+  assertEquals(out.args.slice(0, 3), ["run", "--rm", "-it"]);
+});
+
+Deno.test("buildRunArgs: dedupes mount targets (config + defaults collision)", async () => {
+  const home = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${home}/.claude`);
+    await Deno.mkdir(`${home}/Downloads`);
+    await Deno.mkdir(`${home}/Desktop`);
+
+    // Tier-2 config that explicitly mounts ~/.claude — same target the
+    // defaults block would also emit. Without dedupe we'd send `-v` twice
+    // and Apple `container` virtiofs returns EBUSY.
+    const cfg: ResolvedConfig = {
+      source: { kind: "devcontainer", path: "/p/.devcontainer/devcontainer.json", dir: "/p", raw: {} },
+      workspaceDir: "/Users/me/proj",
+      config: {
+        version: 1,
+        mounts: [{ source: `${home}/.claude`, target: "/home/node/.claude" }],
+      },
+      warnings: [],
+    };
+    const out = buildRunArgs({
+      resolved: cfg,
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    // Count `-v` flag values that resolve to /home/node/.claude as target.
+    const claudeMounts = out.args.filter((a, i) =>
+      out.args[i - 1] === "-v" && a.includes(":/home/node/.claude")
+    );
+    assertEquals(claudeMounts.length, 1, "duplicate ~/.claude mount emitted");
+  } finally {
+    await Deno.remove(home, { recursive: true });
+  }
+});
+
 Deno.test("buildRunArgs: applies resources caps", () => {
   const out = buildRunArgs({
     resolved: resolved({ resources: { cpus: 4, memory: "8G" } }),
