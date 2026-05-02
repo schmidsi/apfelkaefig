@@ -76,10 +76,11 @@ redundant.
 
 Launch:
 
-1. `./build.sh` — build the sandbox image (one-time; rebuild when the Dockerfile changes).
-2. `./start.sh` — start Claude Code inside the sandbox.
+1. `akf up` — first run builds the embedded base image (one-time, ~minute or two), then starts
+   Claude Code inside the sandbox. Subsequent runs reuse the cached image.
 
-The sandbox mounts this folder at `/workspace`, `$HOME/.claude` read-write, and `$HOME/Downloads`
-and `$HOME/Desktop` read-only.
+Configured via `.apfelkaefig.json` at the repo root. The sandbox mounts this folder at
+`/workspaces/apfelkaefig`, `$HOME/.claude` read-write, and `$HOME/Downloads` and `$HOME/Desktop`
+read-only.
 
 <!-- akf:end -->
