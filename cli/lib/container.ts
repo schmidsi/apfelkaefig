@@ -168,9 +168,10 @@ function stdinIsTerminal(): boolean {
 
 // Per-project image tag derived from the workspace basename — preserves the
 // fix from a96b899. Lowercased + non-alnum stripped to keep it a valid tag.
+// Docker tags must start with [a-z0-9], so strip leading separators too.
 export function projectImageTag(workspaceHostPath: string): string {
   const base = basename(workspaceHostPath).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-  const trimmed = base.replace(/^-+|-+$/g, "");
+  const trimmed = base.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
   return `${trimmed || "akf"}-sandbox`;
 }
 
