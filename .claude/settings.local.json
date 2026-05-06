@@ -11,7 +11,10 @@
       "Bash(container --help)",
       "Bash(container image *)",
       "Bash(gh api *)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(git add *)",
+      "Bash(git -c user.email=simon+agent@schmid.io -c 'user.name=Simon Agent' -c commit.gpgsign=false commit -m ' *)",
+      "Bash(./dist/akf doctor *)"
     ]
   }
 }

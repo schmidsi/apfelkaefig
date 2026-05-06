@@ -45,8 +45,8 @@ async function main(argv: string[]): Promise<number> {
   const [subcommand, ...rest] = flags._.map(String);
 
   if (!subcommand) {
-    console.log(USAGE);
-    return 0;
+    console.error("No subcommand given — running `akf up`. Run `akf --help` to see other commands.");
+    return await dispatchUp([]);
   }
 
   switch (subcommand) {
