@@ -1,4 +1,4 @@
-import { dirname, join, resolve } from "@std/path";
+import { dirname, isAbsolute, join, resolve } from "@std/path";
 import { parse as parseJsonc } from "@std/jsonc";
 import {
   ALLOWED_TOP_LEVEL_KEYS,
@@ -297,6 +297,21 @@ export async function resolveConfig({
       throw new ConfigError("devcontainer.json must be a JSON object", found.devcontainer);
     }
     config = devcontainerToConfig(raw as Record<string, unknown>);
+    // Per devcontainer spec, build.dockerfile is relative to devcontainer.json's
+    // directory (typically .devcontainer/), not the workspace root. Normalize to
+    // absolute here so downstream callers can stay path-agnostic.
+    if (
+      typeof config.image === "object" && config.image !== null &&
+      "dockerfile" in config.image && typeof config.image.dockerfile === "string" &&
+      !isAbsolute(config.image.dockerfile)
+    ) {
+      config = {
+        ...config,
+        image: {
+          dockerfile: resolve(dirname(found.devcontainer), config.image.dockerfile),
+        },
+      };
+    }
     source = {
       kind: "devcontainer",
       path: found.devcontainer,

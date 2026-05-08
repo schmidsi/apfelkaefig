@@ -256,11 +256,36 @@ Deno.test("resolveConfig: falls through to devcontainer translation", async () =
     assertEquals(r.source.kind, "devcontainer");
     assertEquals(r.config.user, "node");
     assertEquals(r.config.workspaceFolder, "/workspace");
-    assertEquals(r.config.image, { dockerfile: "Dockerfile" });
+    assertEquals(r.config.image, { dockerfile: join(dir, ".devcontainer", "Dockerfile") });
     assertEquals(r.config.mounts?.length, 2);
     assertEquals(r.config.mounts?.[1].readonly, true);
     assertEquals(r.config.env?.CLAUDE_CONFIG_DIR, "/home/node/.claude");
     assertEquals(r.config.env?.TOKEN, "${localEnv:TOKEN}");
+  });
+});
+
+Deno.test("resolveConfig: devcontainer build.dockerfile resolves relative to .devcontainer/", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.mkdir(join(dir, ".devcontainer"));
+    await Deno.writeTextFile(
+      join(dir, ".devcontainer", "devcontainer.json"),
+      JSON.stringify({ build: { dockerfile: "Dockerfile" } }),
+    );
+    const r = await resolveConfig({ cwd: dir });
+    assertEquals(r.config.image, { dockerfile: join(dir, ".devcontainer", "Dockerfile") });
+  });
+});
+
+Deno.test("resolveConfig: devcontainer build.dockerfile preserves absolute paths", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.mkdir(join(dir, ".devcontainer"));
+    const abs = "/etc/Dockerfile";
+    await Deno.writeTextFile(
+      join(dir, ".devcontainer", "devcontainer.json"),
+      JSON.stringify({ build: { dockerfile: abs } }),
+    );
+    const r = await resolveConfig({ cwd: dir });
+    assertEquals(r.config.image, { dockerfile: abs });
   });
 });
 
