@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="apfelkäfig" width="420">
+</p>
+
 # apfelkäfig
 
 Disposable dev sandboxes on Apple Silicon, safe to point coding agents at.
