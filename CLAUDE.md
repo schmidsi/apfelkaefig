@@ -2,7 +2,7 @@
 
 Sandboxed dev environment built on Apple's native `container` CLI. Disposable, hermetic dev shells
 on Apple Silicon, also safe to point coding agents at (Claude Code, Codex, Gemini CLI). **Dual-use,
-dev-first.** See `POSITIONING.md` for the full naming/strategy brainstorm.
+dev-first.**
 
 ## Scope
 
@@ -11,60 +11,35 @@ priority. Optimize decisions for "works on Simon's machine, ships fast" over "po
 strangers." Distribution surfaces (Homebrew, npm, ghcr.io publishing) are deferred until they pay
 for themselves.
 
-## Status
+## Repo orientation
 
-Pre-code. The repo currently holds the leftover `create-claude-in-an-apple` npx scaffolder from a
-prior iteration — to be reworked, not extended. Next session is an architecture session, not
-implementation.
+- **Language:** Deno + TypeScript. Entry point `cli/main.ts`.
+- **Commands:** `cli/commands/{up,init,build,eject,clean,doctor}.ts` — six subcommands dispatched
+  from `main.ts`.
+- **Config schema:** `schema/v1.json` (JSON Schema Draft 7). `.apfelkaefig.json` is JSONC; unknown
+  top-level keys are a **hard error** — promote to `.devcontainer/devcontainer.json` (tier 3) when
+  you outgrow the schema.
+- **Templates:** `templates/` (rendered by `akf init` / `akf eject`).
+- **Base image:** `image/Dockerfile`, embedded into the compiled binary via `deno compile --include`.
+- **Tests:** `deno task test`. Build: `deno task compile` → `dist/akf`. Dev: `deno task dev <args>`.
 
-## Decisions made (2026-04-08 session)
+## Conventions
 
-- **Brand:** Apfelkäfig. ASCII `apfelkaefig`. Domain acquired, GitHub org `ApfelKaefig` exists but
-  empty.
-- **Binary name:** `akf` (three keystrokes, `gh`/`kubectl` pattern). Homebrew formula will be
-  `apfelkaefig` installing binary `akf`.
-- **Repo:** `ApfelKaefig/apfelkaefig` (monorepo until it hurts). This folder becomes that repo.
-  Likely a clean history reset rather than carrying the prior `create-claude-in-an-apple` commits.
-- **Implementation language: Deno** (most probably — to be confirmed in the architecture session).
-  Earlier discussion considered Go; user pushed back toward Deno. Revisit trade-offs (single-binary
-  `deno compile`, Homebrew packaging, shelling out to `container`, reusing the existing Node CDP
-  proxy) at the start of next session.
+- **Three-tier model** (drive-by / akf-native / devcontainer-native — see README) shapes feature
+  scope. Decide which tier a change belongs to before adding code.
+- **Marker-managed blocks** must be re-rendered idempotently by `akf init`, never hand-merged:
+  `<!-- akf:start -->` / `<!-- akf:end -->` in this file, `# >>> akf >>>` / `# <<< akf <<<` in
+  host `.gitignore`.
+- **Never touch `settings.local.json`** from `akf init` — `--dangerously-skip-permissions` makes
+  it dead config, and merging into it breaks user edits.
 
-## Open for next session (architecture)
+## Where things live
 
-- **Reconcile the two framings.** The "npx scaffolder" (current code) and the "`akf` CLI that
-  manages envs" framings are _not_ in contradiction per the user — they're different applications of
-  the same underlying tools. Figure out the shared core and how both surfaces sit on top of it. Do
-  not assume the scaffolder gets thrown away.
-- Final call on Deno vs alternatives.
-- Repo layout once language is locked.
-- How to handle Apple `container` v0.9 networking bugs (port forwarding, build-time networking).
-  Read `emarc/claude-contained` source before rediscovering their gotchas.
-- `akf doctor` and minimum `container` version pinning.
-
-## What's worth keeping from the current scaffold
-
-- `template/scripts/launch-chrome-debug.sh` + the Node CDP proxy on :9223 — rewrites Host headers so
-  the container can drive host Chrome via `host.docker.internal:9223`. This is a real, hard-won
-  workaround for an Apple-`container` networking gotcha and is the hidden crown jewel. **Do not lose
-  this when restructuring.**
-- `template/Dockerfile`, `template/start.sh` mount layout (`/workspace`, `~/.claude` mount, RO
-  `~/Downloads`, `--dangerously-skip-permissions` under the VM-is-the-sandbox model).
-- `template/CLAUDE.md`, `template/.mcp.json`, `template/.claude/settings.local.json` as starting
-  defaults for whatever the scaffolder surface becomes.
-
-## Throw away / rework
-
-- `bin/create.mjs`, root `package.json`, root `README.md` — all branded for
-  `create-claude-in-an-apple`. Rework once language + architecture decided.
-
-## Competitive notes (see POSITIONING.md for detail)
-
-- Only direct competitor: `emarc/claude-contained` (dual-mode Docker / Apple `container`; no
-  localhost port forwarding on the Apple path). Read their source before writing the wrapper layer.
-- Docker Sandboxes (March 2026) validated the category but is cross-platform Docker — our moat is
-  being native to Apple Silicon with no Docker Desktop tax.
-- Apple `container` is pre-1.0 (v0.9, Feb 2026). First-mover window is now.
+- `README.md` — user-facing docs.
+- `TODO.md` — un-shipped surfaces (npm, brew, ghcr.io, CI, demo).
+- `tasks/00X_*.md` — detailed implementation plans (current and historical).
+- `docs/notes/` — frozen design history (`positioning.md`, `architecture.md`).
+- `docs/secrets.md` — 1Password integration detail.
 
 <!-- akf:start -->
 
