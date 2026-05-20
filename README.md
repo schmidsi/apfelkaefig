@@ -14,18 +14,6 @@ Status: pre-release (v0.2). macOS / Apple Silicon only.
 
 ## Install
 
-Homebrew (planned):
-
-```bash
-brew install apfelkaefig
-```
-
-npm:
-
-```bash
-npm install -g apfelkaefig
-```
-
 From source (Deno 1.41+):
 
 ```bash
@@ -34,6 +22,8 @@ cd apfelkaefig
 deno task compile
 cp dist/akf /usr/local/bin/akf
 ```
+
+Homebrew and npm are planned — see [`TODO.md`](TODO.md).
 
 ## Use
 
@@ -91,10 +81,8 @@ and rewrite a `.apfelkaefig.json`.
 JSONC: comments and trailing commas allowed. Unknown top-level keys are a hard error — promote to
 `.devcontainer/devcontainer.json` (tier 3) when you outgrow the schema.
 
-## Try it without installing anything
-
-`SKILL.md` is the no-CLI version: a Claude Code skill that drops the same scaffold by hand. Drop it
-in `~/.claude/skills/apfelkaefig/` and let Claude run the setup, or paste the steps yourself.
+The no-CLI manual setup lives in [`SKILL.md`](SKILL.md) — a Claude Code skill that drops the same
+scaffold by hand.
 
 ## Requirements
 
@@ -109,13 +97,11 @@ config actually requires them.
 ## Why
 
 Coding agents stop every few turns to ask permission for Bash commands, file writes, and WebFetch
-domains. `--dangerously-skip-permissions` silences the prompts, but it only makes sense when the
-agent genuinely can't escape — i.e., when it runs inside a VM whose only writable mounts are the
-workspace and `~/.claude`. That's what apfelkäfig sets up, using Apple's native `container` CLI
-(lightweight VMs, no Docker Desktop tax on Apple Silicon).
+domains. `--dangerously-skip-permissions` is only safe when the agent runs inside a VM whose only
+writable mounts are the workspace and `~/.claude` — which is what apfelkäfig sets up.
 
-See [POSITIONING.md](POSITIONING.md) for the competitive landscape and
-[ARCHITECTURE_EXPLORATION.md](ARCHITECTURE_EXPLORATION.md) for the design notes.
+See [`docs/notes/positioning.md`](docs/notes/positioning.md) for the competitive landscape and
+[`docs/notes/architecture.md`](docs/notes/architecture.md) for design notes.
 
 ## Security model
 
@@ -136,22 +122,14 @@ the point. Understand exactly what the VM can reach before letting an agent loos
 - Touch anything else on your host — other project folders, your home directory, shell history.
 - Write to `~/Downloads` or `~/Desktop` (read-only mounts).
 
-**Not covered:** secret exfiltration via network. Anything the agent can read inside the VM
-(including `~/.claude` contents) it can also send to the open internet. Sandboxing limits local
-blast radius, not data egress.
+Sandboxing limits local blast radius, not network egress — anything the agent can read it can also
+send out.
 
-### Secrets inside the sandbox
+### Secrets
 
-The base image ships with the 1Password CLI (`op`) and `akf up` injects `OP_SERVICE_ACCOUNT_TOKEN`
-from your env or macOS keychain by default. Inside the VM, resolve secrets on demand with `op read`
-— the SA token is the only long-lived credential crossing the boundary, and it's revocable in one
-click.
-
-Opt out via `secrets.onepassword: false` in config or `AKF_DISABLE_OP=1`. If you set
-`secrets.onepassword: true` and the token is missing, `akf up` errors (security is the top concern —
-silent degradation is not acceptable). See
-[skills/1password-agent-secrets/SKILL.md](skills/1password-agent-secrets/SKILL.md) for the full
-pattern (vault setup, keychain storage, the 128-char truncation bug).
+The base image ships with the 1Password CLI (`op`); `akf up` injects `OP_SERVICE_ACCOUNT_TOKEN` from
+your env or macOS keychain so secrets can be resolved on demand with `op read`. See
+[`docs/secrets.md`](docs/secrets.md) for the full pattern and threat model.
 
 Found a security issue? Open a GitHub issue or email the address in `git log`.
 
