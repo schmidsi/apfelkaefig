@@ -16,16 +16,8 @@ v0.9 that break the `apt-get` / `curl` steps below.
 
 ## Future: ghcr.io publishing
 
-Eventually this image will be published to `ghcr.io/apfelkaefig/base`, with the `akf` binary
-embedding a pinned `sha256:…` digest at compile time so drive-by users only need Apple `container`
-(no Docker). That work is deferred until it pays for itself — for now, local build is fine.
-
-When ghcr.io publishing lands:
-
-- `image.yml` workflow builds + pushes on `image-v*` tags.
-- `release.yml` reads the digest and bakes it into the binary via `--env-file`.
-- `baseimage.ts` flips the default from "embedded" to "registry."
-- `AKF_BASE_IMAGE` keeps working as a manual override.
+Tracked in [`TODO.md`](../TODO.md). For now, the image builds locally on first `akf up` and that's
+fine.
 
 ## Override for development
 
