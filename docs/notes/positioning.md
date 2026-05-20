@@ -1,5 +1,7 @@
 # Apfelkäfig — Positioning & Naming
 
+> Frozen snapshot from 2026-04-08 — superseded by current README + code, kept for context.
+
 > Session notes from the naming + positioning brainstorm. Living document. Date: 2026-04-08
 
 ## Name

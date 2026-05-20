@@ -1,5 +1,7 @@
 # Architecture Exploration (2026-04-12)
 
+> Frozen snapshot from 2026-04-12 — superseded by current README + code, kept for context.
+
 ## Language: Deno + TypeScript
 
 `deno compile` produces self-contained executables (~58MB on macOS ARM as of Deno 1.41+).
