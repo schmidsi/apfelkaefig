@@ -18,6 +18,7 @@ import {
   type WriteStatus,
 } from "../lib/fs.ts";
 import { GITIGNORE_MARKERS, MARKDOWN_MARKERS } from "../lib/markers.ts";
+import { addPluginToWorkspace, type PluginAddResult } from "./plugin.ts";
 
 export type InitMode = "default" | "advanced" | "bash";
 
@@ -32,15 +33,16 @@ interface Report {
   status: WriteStatus | AppendStatus;
 }
 
-const STATUS_LABELS: Record<WriteStatus | AppendStatus, string> = {
+const STATUS_LABELS: Record<WriteStatus | AppendStatus | "updated", string> = {
   "created": "created",
   "skipped-exists": "skipped (exists)",
   "appended": "appended",
   "skipped-present": "skipped (already present)",
+  "updated": "updated",
 };
 
 export async function runInit(
-  { cwd, mode = "default" }: { cwd: string; mode?: InitMode },
+  { cwd, mode = "default", plugins = [] }: { cwd: string; mode?: InitMode; plugins?: string[] },
 ): Promise<void> {
   const reports: Report[] = [];
 
@@ -103,13 +105,27 @@ export async function runInit(
     ),
   });
 
+  const pluginReports: PluginAddResult[] = [];
+  for (const plugin of plugins) {
+    pluginReports.push(await addPluginToWorkspace({ cwd, plugin }));
+  }
+
   console.log();
   for (const r of reports) {
     console.log(`  ${r.label.padEnd(34)} ${STATUS_LABELS[r.status]}`);
   }
+  for (const p of pluginReports) {
+    console.log(`  plugin:${p.pluginId}`.padEnd(36) + " configured");
+    for (const marker of p.markerStatuses) {
+      console.log(`  ${marker.path.padEnd(34)} ${STATUS_LABELS[marker.status]}`);
+    }
+  }
   console.log();
 
-  const anyWork = reports.some((r) => r.status === "created" || r.status === "appended");
+  const anyWork = reports.some((r) => r.status === "created" || r.status === "appended") ||
+    pluginReports.some((p) =>
+      p.configChanged || p.markerStatuses.some((m) => m.status !== "skipped-present")
+    );
   if (!anyWork) {
     console.log("Nothing to do — this folder is already set up for akf.");
     return;

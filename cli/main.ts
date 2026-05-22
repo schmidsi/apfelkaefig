@@ -5,14 +5,18 @@ import { runBuild } from "./commands/build.ts";
 import { runEject } from "./commands/eject.ts";
 import { runClean } from "./commands/clean.ts";
 import { runDoctor } from "./commands/doctor.ts";
+import { runPluginCommand } from "./commands/plugin.ts";
+import { parsePluginList, PluginError } from "./lib/plugins.ts";
 import denoJson from "../deno.json" with { type: "json" };
 
 const USAGE = `akf — dev sandboxes on Apple container
 
 Usage:
   akf up [-- cmd args…]    Launch the sandbox (built-in image if no config).
-  akf init [--advanced|--bash]
+  akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
+  akf plugin list|explain|add
+                           Manage built-in sandbox plugins.
   akf build [--from-dockerfile <path>] [--no-cleanup]
                            Build a custom image (Docker → local registry → Apple container).
   akf eject --devcontainer | --bash [--force]
@@ -45,7 +49,9 @@ async function main(argv: string[]): Promise<number> {
   const [subcommand, ...rest] = flags._.map(String);
 
   if (!subcommand) {
-    console.error("No subcommand given — running `akf up`. Run `akf --help` to see other commands.");
+    console.error(
+      "No subcommand given — running `akf up`. Run `akf --help` to see other commands.",
+    );
     return await dispatchUp([]);
   }
 
@@ -62,6 +68,8 @@ async function main(argv: string[]): Promise<number> {
       return await dispatchClean(rest);
     case "doctor":
       return await runDoctor({ cwd: Deno.cwd() });
+    case "plugin":
+      return await runPluginCommand({ cwd: Deno.cwd(), args: rest });
     default:
       console.error(`akf: unknown command '${subcommand}'`);
       console.error(USAGE);
@@ -86,9 +94,10 @@ async function dispatchUp(rest: string[]): Promise<number> {
 }
 
 async function dispatchInit(rest: string[]): Promise<number> {
-  const flags = parseArgs(rest, { boolean: ["advanced", "bash"] });
+  const flags = parseArgs(rest, { boolean: ["advanced", "bash"], string: ["plugins"] });
   const mode = flags.advanced ? "advanced" : flags.bash ? "bash" : "default";
-  await runInit({ cwd: Deno.cwd(), mode });
+  const plugins = flags.plugins ? parsePluginList(flags.plugins) : [];
+  await runInit({ cwd: Deno.cwd(), mode, plugins });
   return 0;
 }
 
@@ -129,5 +138,13 @@ async function dispatchClean(rest: string[]): Promise<number> {
 }
 
 if (import.meta.main) {
-  Deno.exit(await main(Deno.args));
+  try {
+    Deno.exit(await main(Deno.args));
+  } catch (err) {
+    if (err instanceof PluginError) {
+      console.error(`akf: ${err.message}`);
+      Deno.exit(2);
+    }
+    throw err;
+  }
 }

@@ -20,6 +20,15 @@ export interface SecretsConfig {
   onepassword?: boolean;
 }
 
+export interface OnePasswordPluginConfig {
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface PluginConfigMap {
+  "1password"?: OnePasswordPluginConfig;
+}
+
 export type ImageConfig =
   | string
   | { dockerfile: string };
@@ -35,6 +44,7 @@ export interface ApfelkaefigConfig {
   resources?: ResourcesConfig;
   command?: string | string[];
   secrets?: SecretsConfig;
+  plugins?: PluginConfigMap;
 }
 
 // Defaults applied when a field is unset in the resolved config.
@@ -58,4 +68,5 @@ export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "resources",
   "command",
   "secrets",
+  "plugins",
 ]);

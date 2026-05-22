@@ -113,6 +113,24 @@
           "description": "Inject OP_SERVICE_ACCOUNT_TOKEN into the container. Implicit when the token is in the macOS keychain; set false to opt out, true to require."
         }
       }
+    },
+    "plugins": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Built-in akf plugin configuration. Plugins are curated capabilities shipped with akf, not repo-local executable code.",
+      "properties": {
+        "1password": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable the 1Password sandbox integration."
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ import {
   type MountConfig,
   SCHEMA_VERSION,
 } from "./schema.ts";
+import { listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
 
 export type ConfigSource =
   | { kind: "apfelkaefig"; path: string; dir: string; raw: ApfelkaefigConfig }
@@ -130,6 +131,7 @@ export function validate(value: unknown, sourcePath?: string): ApfelkaefigConfig
   }
   if ("command" in obj && obj.command !== undefined) validateCommand(obj.command, sourcePath);
   if ("secrets" in obj && obj.secrets !== undefined) validateSecrets(obj.secrets, sourcePath);
+  if ("plugins" in obj && obj.plugins !== undefined) validatePlugins(obj.plugins, sourcePath);
 
   return obj as unknown as ApfelkaefigConfig;
 }
@@ -252,6 +254,50 @@ function validateSecrets(v: unknown, sourcePath?: string): void {
   }
   if ("onepassword" in s && typeof s.onepassword !== "boolean") {
     throw new ConfigError("'secrets.onepassword' must be a boolean", sourcePath);
+  }
+}
+
+function validatePlugins(v: unknown, sourcePath?: string): void {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    throw new ConfigError("'plugins' must be an object", sourcePath);
+  }
+  for (const [id, rawConfig] of Object.entries(v as Record<string, unknown>)) {
+    let canonical: string;
+    try {
+      canonical = resolvePluginId(id);
+    } catch (err) {
+      if (err instanceof PluginError) {
+        throw new ConfigError(err.message, sourcePath);
+      }
+      throw err;
+    }
+    if (canonical !== id) {
+      throw new ConfigError(
+        `'plugins.${id}' must use canonical plugin id '${canonical}'`,
+        sourcePath,
+      );
+    }
+    validatePluginConfig(id, rawConfig, sourcePath);
+  }
+}
+
+function validatePluginConfig(id: string, v: unknown, sourcePath?: string): void {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    throw new ConfigError(`'plugins.${id}' must be an object`, sourcePath);
+  }
+  if (!listPlugins().some((p) => p.id === id)) {
+    throw new ConfigError(`unknown plugin '${id}'`, sourcePath);
+  }
+  const cfg = v as Record<string, unknown>;
+  if (id === "1password") {
+    for (const k of Object.keys(cfg)) {
+      if (k !== "enabled") {
+        throw new ConfigError(`'plugins.${id}' has unknown key '${k}'`, sourcePath);
+      }
+    }
+    if (cfg.enabled !== true && cfg.enabled !== false) {
+      throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
+    }
   }
 }
 

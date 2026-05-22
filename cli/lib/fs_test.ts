@@ -1,6 +1,6 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
-import { appendBlockIfAbsent, writeIfMissing } from "./fs.ts";
+import { appendBlockIfAbsent, upsertBlock, writeIfMissing } from "./fs.ts";
 
 async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "akf-test-" });
@@ -90,5 +90,46 @@ Deno.test("appendBlockIfAbsent handles empty existing file", async () => {
     const status = await appendBlockIfAbsent(path, "# >>> a >>>", "# <<< a <<<", ".akf/");
     assertEquals(status, "appended");
     assertEquals(await Deno.readTextFile(path), "# >>> a >>>\n.akf/\n# <<< a <<<\n");
+  });
+});
+
+Deno.test("upsertBlock creates, updates, and then skips an owned block", async () => {
+  await withTmpDir(async (dir) => {
+    const path = join(dir, "CLAUDE.md");
+    assertEquals(await upsertBlock(path, "<!-- s -->", "<!-- e -->", "body"), "created");
+    assertEquals(await Deno.readTextFile(path), "<!-- s -->\nbody\n<!-- e -->\n");
+
+    assertEquals(
+      await upsertBlock(path, "<!-- s -->", "<!-- e -->", "new body", { overwrite: true }),
+      "updated",
+    );
+    assertEquals(await Deno.readTextFile(path), "<!-- s -->\nnew body\n<!-- e -->\n");
+
+    assertEquals(
+      await upsertBlock(path, "<!-- s -->", "<!-- e -->", "new body"),
+      "skipped-present",
+    );
+  });
+});
+
+Deno.test("upsertBlock refuses drift by default", async () => {
+  await withTmpDir(async (dir) => {
+    const path = join(dir, "CLAUDE.md");
+    await Deno.writeTextFile(path, "<!-- s -->\nuser edit\n<!-- e -->\n");
+    await assertRejects(
+      () => upsertBlock(path, "<!-- s -->", "<!-- e -->", "generated"),
+      Error,
+      "differs from generated content",
+    );
+  });
+});
+
+Deno.test("upsertBlock appends to existing file without marker", async () => {
+  await withTmpDir(async (dir) => {
+    const path = join(dir, "CLAUDE.md");
+    await Deno.writeTextFile(path, "# Project\n");
+    const status = await upsertBlock(path, "<!-- s -->", "<!-- e -->", "body");
+    assertEquals(status, "appended");
+    assertEquals(await Deno.readTextFile(path), "# Project\n\n<!-- s -->\nbody\n<!-- e -->\n");
   });
 });

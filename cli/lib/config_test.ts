@@ -164,6 +164,40 @@ Deno.test("validate accepts secrets.onepassword as boolean only", () => {
   );
 });
 
+Deno.test("validate accepts canonical plugin config object", () => {
+  const c = validate({ version: 1, plugins: { "1password": { enabled: true } } });
+  assertEquals(c.plugins?.["1password"]?.enabled, true);
+});
+
+Deno.test("validate rejects plugin array shape", () => {
+  assertThrows(
+    () => validate({ version: 1, plugins: ["1password"] }),
+    ConfigError,
+    "'plugins' must be an object",
+  );
+});
+
+Deno.test("validate rejects plugin aliases in config", () => {
+  assertThrows(
+    () => validate({ version: 1, plugins: { "1pw": { enabled: true } } }),
+    ConfigError,
+    "must use canonical plugin id '1password'",
+  );
+});
+
+Deno.test("validate rejects malformed plugin settings", () => {
+  assertThrows(
+    () => validate({ version: 1, plugins: { "1password": { enabled: "yes" } } }),
+    ConfigError,
+    "'plugins.1password.enabled' must be a boolean",
+  );
+  assertThrows(
+    () => validate({ version: 1, plugins: { "1password": { enabled: true, extra: 1 } } }),
+    ConfigError,
+    "unknown key 'extra'",
+  );
+});
+
 Deno.test("parseConfig accepts JSONC with comments and trailing commas", () => {
   const text = `{
     // this is a comment
