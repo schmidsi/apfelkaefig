@@ -70,6 +70,11 @@ export function buildRunArgs(
   const wantTty = input.tty ?? stdinIsTerminal();
   const args: string[] = ["run", "--rm", wantTty ? "-it" : "-i"];
   args.push("--cpus", String(e.resources.cpus), "--memory", e.resources.memory);
+  for (const p of c.ports ?? []) {
+    const proto = p.protocol ?? "tcp";
+    const hostIp = p.hostIp ? `${p.hostIp}:` : "";
+    args.push("-p", `${hostIp}${p.host}:${p.container}/${proto}`);
+  }
 
   // Track emitted mount targets so we don't pass duplicate `-v` for the same
   // path — Apple `container`'s virtiofs rejects that with EBUSY (errno 16).

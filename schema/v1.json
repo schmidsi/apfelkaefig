@@ -114,6 +114,36 @@
         }
       }
     },
+    "ports": {
+      "type": "array",
+      "description": "Host-to-container port forwards rendered as Apple `container run --publish` flags.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["host", "container"],
+        "properties": {
+          "hostIp": {
+            "type": "string",
+            "description": "Host IP to bind, usually 127.0.0.1."
+          },
+          "host": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "container": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "protocol": {
+            "type": "string",
+            "enum": ["tcp", "udp"],
+            "default": "tcp"
+          }
+        }
+      }
+    },
     "plugins": {
       "type": "object",
       "additionalProperties": false,
@@ -127,6 +157,35 @@
             "enabled": {
               "type": "boolean",
               "description": "Enable the 1Password sandbox integration."
+            }
+          }
+        },
+        "crit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "agentIntegration", "installMethod", "version", "port"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable the Crit sandbox integration."
+            },
+            "agentIntegration": {
+              "type": "string",
+              "const": "claude-code"
+            },
+            "installMethod": {
+              "type": "string",
+              "const": "pinned-release"
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^v\\d+\\.\\d+\\.\\d+$"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 3247
             }
           }
         }

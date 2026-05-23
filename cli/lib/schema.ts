@@ -20,13 +20,30 @@ export interface SecretsConfig {
   onepassword?: boolean;
 }
 
+export interface PortConfig {
+  hostIp?: string;
+  host: number;
+  container: number;
+  protocol?: "tcp" | "udp";
+}
+
 export interface OnePasswordPluginConfig {
   enabled: boolean;
   [key: string]: unknown;
 }
 
+export interface CritPluginConfig {
+  enabled: boolean;
+  agentIntegration: "claude-code";
+  installMethod: "pinned-release";
+  version: string;
+  port: number;
+  [key: string]: unknown;
+}
+
 export interface PluginConfigMap {
   "1password"?: OnePasswordPluginConfig;
+  "crit"?: CritPluginConfig;
 }
 
 export type ImageConfig =
@@ -44,6 +61,7 @@ export interface ApfelkaefigConfig {
   resources?: ResourcesConfig;
   command?: string | string[];
   secrets?: SecretsConfig;
+  ports?: PortConfig[];
   plugins?: PluginConfigMap;
 }
 
@@ -68,5 +86,6 @@ export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "resources",
   "command",
   "secrets",
+  "ports",
   "plugins",
 ]);

@@ -1,56 +1,15 @@
 import { type ApfelkaefigConfig, type PluginConfigMap, SCHEMA_URL } from "./schema.ts";
+import { type BuiltInPlugin, type MarkerBlock, type PluginDoctorCheck } from "../plugins/types.ts";
+import { onePasswordPlugin } from "../plugins/1password/plugin.ts";
+import { critPlugin } from "../plugins/crit/plugin.ts";
+
+export type { BuiltInPlugin, MarkerBlock, PluginDoctorCheck };
 
 export type PluginId = keyof PluginConfigMap;
 
-export interface MarkerBlock {
-  path: string;
-  startMarker: string;
-  endMarker: string;
-  contents: string;
-}
-
-export interface BuiltInPlugin {
-  id: PluginId;
-  aliases: string[];
-  description: string;
-  defaultConfig: Record<string, unknown>;
-  applyConfig: (base: ApfelkaefigConfig, config: Record<string, unknown>) => ApfelkaefigConfig;
-  markerBlocks: (config: Record<string, unknown>) => MarkerBlock[];
-}
-
-const ONEPASSWORD_GUIDANCE = `## 1Password inside the sandbox
-
-This project enables the akf 1Password plugin. The sandbox receives only
-\`OP_SERVICE_ACCOUNT_TOKEN\`; resolve secrets on demand inside the sandbox with
-\`op read\` instead of writing raw secret values to the repo or config.`;
-
-const ONEPASSWORD_PLUGIN: BuiltInPlugin = {
-  id: "1password",
-  aliases: ["1pw", "op"],
-  description: "Forward OP_SERVICE_ACCOUNT_TOKEN and document op read usage inside the sandbox.",
-  defaultConfig: { enabled: true },
-  applyConfig(base, config) {
-    if (!config.enabled) return base;
-    return {
-      ...base,
-      secrets: {
-        ...(base.secrets ?? {}),
-        onepassword: true,
-      },
-    };
-  },
-  markerBlocks(_config) {
-    return [{
-      path: "CLAUDE.md",
-      startMarker: "<!-- akf plugin: 1password start -->",
-      endMarker: "<!-- akf plugin: 1password end -->",
-      contents: ONEPASSWORD_GUIDANCE,
-    }];
-  },
-};
-
 const REGISTRY: Record<PluginId, BuiltInPlugin> = {
-  "1password": ONEPASSWORD_PLUGIN,
+  "1password": onePasswordPlugin,
+  "crit": critPlugin,
 };
 
 const ALIASES = new Map<string, PluginId>();
@@ -128,4 +87,38 @@ export function pluginMarkerBlocks(config: ApfelkaefigConfig): MarkerBlock[] {
     blocks.push(...plugin.markerBlocks(pluginConfig as Record<string, unknown>));
   }
   return blocks;
+}
+
+export function pluginDockerfileBlocks(config: ApfelkaefigConfig): MarkerBlock[] {
+  const blocks: MarkerBlock[] = [];
+  for (const [id, pluginConfig] of Object.entries(config.plugins ?? {})) {
+    if (!pluginConfig?.enabled) continue;
+    const plugin = getPlugin(id as PluginId);
+    blocks.push(...(plugin.dockerfileBlocks?.(pluginConfig as Record<string, unknown>) ?? []));
+  }
+  return blocks;
+}
+
+export async function pluginDoctorChecks(
+  resolved: { config: ApfelkaefigConfig; workspaceDir: string },
+): Promise<PluginDoctorCheck[]> {
+  const checks: PluginDoctorCheck[] = [];
+  for (const [id, pluginConfig] of Object.entries(resolved.config.plugins ?? {})) {
+    if (!pluginConfig?.enabled) continue;
+    const plugin = getPlugin(id as PluginId);
+    checks.push(
+      ...(await plugin.doctorChecks?.(resolved, pluginConfig as Record<string, unknown>) ?? []),
+    );
+  }
+  return checks;
+}
+
+export function pluginPostApplyMessages(config: ApfelkaefigConfig): string[] {
+  const messages: string[] = [];
+  for (const [id, pluginConfig] of Object.entries(config.plugins ?? {})) {
+    if (!pluginConfig?.enabled) continue;
+    const plugin = getPlugin(id as PluginId);
+    messages.push(...(plugin.postApplyMessages?.(pluginConfig as Record<string, unknown>) ?? []));
+  }
+  return messages;
 }

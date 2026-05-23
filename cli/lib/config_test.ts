@@ -169,6 +169,32 @@ Deno.test("validate accepts canonical plugin config object", () => {
   assertEquals(c.plugins?.["1password"]?.enabled, true);
 });
 
+Deno.test("validate accepts ports", () => {
+  const c = validate({
+    version: 1,
+    ports: [{ hostIp: "127.0.0.1", host: 3247, container: 3247, protocol: "tcp" }],
+  });
+  assertEquals(c.ports?.[0], {
+    hostIp: "127.0.0.1",
+    host: 3247,
+    container: 3247,
+    protocol: "tcp",
+  });
+});
+
+Deno.test("validate rejects malformed ports", () => {
+  assertThrows(
+    () => validate({ version: 1, ports: [{ host: 0, container: 3247 }] }),
+    ConfigError,
+    "ports[0].host",
+  );
+  assertThrows(
+    () => validate({ version: 1, ports: [{ host: 3247, container: 3247, protocol: "http" }] }),
+    ConfigError,
+    "protocol",
+  );
+});
+
 Deno.test("validate rejects plugin array shape", () => {
   assertThrows(
     () => validate({ version: 1, plugins: ["1password"] }),
@@ -195,6 +221,59 @@ Deno.test("validate rejects malformed plugin settings", () => {
     () => validate({ version: 1, plugins: { "1password": { enabled: true, extra: 1 } } }),
     ConfigError,
     "unknown key 'extra'",
+  );
+});
+
+Deno.test("validate accepts crit plugin config", () => {
+  const c = validate({
+    version: 1,
+    plugins: {
+      crit: {
+        enabled: true,
+        agentIntegration: "claude-code",
+        installMethod: "pinned-release",
+        version: "v0.13.0",
+        port: 3247,
+      },
+    },
+  });
+  assertEquals(c.plugins?.crit?.version, "v0.13.0");
+});
+
+Deno.test("validate rejects malformed crit plugin config", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          crit: {
+            enabled: true,
+            agentIntegration: "codex",
+            installMethod: "pinned-release",
+            version: "v0.13.0",
+            port: 3247,
+          },
+        },
+      }),
+    ConfigError,
+    "agentIntegration",
+  );
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          crit: {
+            enabled: true,
+            agentIntegration: "claude-code",
+            installMethod: "pinned-release",
+            version: "latest",
+            port: 3247,
+          },
+        },
+      }),
+    ConfigError,
+    "version",
   );
 });
 

@@ -54,6 +54,9 @@ async function ejectDevcontainer(
     workspaceFolder: e.workspaceFolder,
     mounts: defaultMountStrings(e.user).concat((c.mounts ?? []).map(mountObjToString)),
   };
+  if (c.ports && c.ports.length > 0) {
+    dc.forwardPorts = c.ports.map((p) => p.container);
+  }
 
   if (typeof c.image === "string") {
     dc.image = c.image;
@@ -141,6 +144,7 @@ async function ejectBash(
     command: e.command,
     extraMounts: c.mounts ?? [],
     extraEnv: c.env ?? {},
+    ports: c.ports ?? [],
     image: imageRef,
     onepasswordEnabled: c.secrets?.onepassword !== false,
   });
@@ -168,6 +172,7 @@ interface StartTemplateInput {
   command: string[];
   extraMounts: { type?: "bind" | "volume"; source: string; target: string; readonly?: boolean }[];
   extraEnv: Record<string, string>;
+  ports: { hostIp?: string; host: number; container: number; protocol?: "tcp" | "udp" }[];
   image: string;
   onepasswordEnabled: boolean;
 }
@@ -197,7 +202,15 @@ function renderStart(t: StartTemplateInput): string {
     lines.push("");
   }
 
-  // Build mount + env arrays.
+  // Build publish, mount, and env arrays.
+  lines.push("publish_flags=()");
+  for (const p of t.ports) {
+    const hostIp = p.hostIp ? `${p.hostIp}:` : "";
+    const proto = p.protocol ?? "tcp";
+    lines.push(`publish_flags+=(-p ${shellQuote(`${hostIp}${p.host}:${p.container}/${proto}`)})`);
+  }
+  lines.push("");
+
   lines.push("mount_flags=()");
   const wsFolder = t.workspaceFolder.replaceAll(
     "${localWorkspaceFolderBasename}",
@@ -254,6 +267,7 @@ function renderStart(t: StartTemplateInput): string {
   const cmdShell = t.command.map(shellQuote).join(" ");
   lines.push(`exec container run -it --rm \\`);
   lines.push(`  --cpus ${t.cpus} --memory ${t.memory} \\`);
+  lines.push(`  "\${publish_flags[@]}" \\`);
   lines.push(`  "\${mount_flags[@]}" \\`);
   lines.push(`  "\${env_flags[@]}" \\`);
   lines.push(`  -u ${shellQuote(t.user)} -w ${shellQuote(wsFolder)} \\`);

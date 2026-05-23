@@ -31,6 +31,10 @@ Usage:
 const VERSION = denoJson.version;
 
 async function main(argv: string[]): Promise<number> {
+  if (argv[0] === "up") {
+    return await dispatchUp(argv.slice(1));
+  }
+
   const flags = parseArgs(argv, {
     boolean: ["help", "version"],
     alias: { h: "help", v: "version" },

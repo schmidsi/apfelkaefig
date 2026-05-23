@@ -131,6 +131,7 @@ export function validate(value: unknown, sourcePath?: string): ApfelkaefigConfig
   }
   if ("command" in obj && obj.command !== undefined) validateCommand(obj.command, sourcePath);
   if ("secrets" in obj && obj.secrets !== undefined) validateSecrets(obj.secrets, sourcePath);
+  if ("ports" in obj && obj.ports !== undefined) validatePorts(obj.ports, sourcePath);
   if ("plugins" in obj && obj.plugins !== undefined) validatePlugins(obj.plugins, sourcePath);
 
   return obj as unknown as ApfelkaefigConfig;
@@ -257,6 +258,43 @@ function validateSecrets(v: unknown, sourcePath?: string): void {
   }
 }
 
+function validatePorts(v: unknown, sourcePath?: string): void {
+  if (!Array.isArray(v)) throw new ConfigError("'ports' must be an array", sourcePath);
+  for (const [i, p] of v.entries()) {
+    if (typeof p !== "object" || p === null || Array.isArray(p)) {
+      throw new ConfigError(`'ports[${i}]' must be an object`, sourcePath);
+    }
+    const pr = p as Record<string, unknown>;
+    for (const k of Object.keys(pr)) {
+      if (!["hostIp", "host", "container", "protocol"].includes(k)) {
+        throw new ConfigError(`'ports[${i}]' has unknown key '${k}'`, sourcePath);
+      }
+    }
+    if ("hostIp" in pr && typeof pr.hostIp !== "string") {
+      throw new ConfigError(`'ports[${i}].hostIp' must be a string`, sourcePath);
+    }
+    if (!isPort(pr.host)) {
+      throw new ConfigError(`'ports[${i}].host' must be an integer from 1 to 65535`, sourcePath);
+    }
+    if (!isPort(pr.container)) {
+      throw new ConfigError(
+        `'ports[${i}].container' must be an integer from 1 to 65535`,
+        sourcePath,
+      );
+    }
+    if (
+      "protocol" in pr && pr.protocol !== undefined && pr.protocol !== "tcp" &&
+      pr.protocol !== "udp"
+    ) {
+      throw new ConfigError(`'ports[${i}].protocol' must be 'tcp' or 'udp'`, sourcePath);
+    }
+  }
+}
+
+function isPort(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 65535;
+}
+
 function validatePlugins(v: unknown, sourcePath?: string): void {
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
     throw new ConfigError("'plugins' must be an object", sourcePath);
@@ -297,6 +335,33 @@ function validatePluginConfig(id: string, v: unknown, sourcePath?: string): void
     }
     if (cfg.enabled !== true && cfg.enabled !== false) {
       throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
+    }
+    return;
+  }
+  if (id === "crit") {
+    const allowed = ["enabled", "agentIntegration", "installMethod", "version", "port"];
+    for (const k of Object.keys(cfg)) {
+      if (!allowed.includes(k)) {
+        throw new ConfigError(`'plugins.${id}' has unknown key '${k}'`, sourcePath);
+      }
+    }
+    if (cfg.enabled !== true && cfg.enabled !== false) {
+      throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
+    }
+    if (cfg.agentIntegration !== "claude-code") {
+      throw new ConfigError(`'plugins.${id}.agentIntegration' must be 'claude-code'`, sourcePath);
+    }
+    if (cfg.installMethod !== "pinned-release") {
+      throw new ConfigError(`'plugins.${id}.installMethod' must be 'pinned-release'`, sourcePath);
+    }
+    if (typeof cfg.version !== "string" || !/^v\d+\.\d+\.\d+$/.test(cfg.version)) {
+      throw new ConfigError(`'plugins.${id}.version' must look like 'v0.13.0'`, sourcePath);
+    }
+    if (!isPort(cfg.port)) {
+      throw new ConfigError(
+        `'plugins.${id}.port' must be an integer from 1 to 65535`,
+        sourcePath,
+      );
     }
   }
 }

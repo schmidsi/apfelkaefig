@@ -5,8 +5,10 @@ import { upsertBlock, type UpsertStatus } from "../lib/fs.ts";
 import {
   getPlugin,
   listPlugins,
+  pluginDockerfileBlocks,
   type PluginId,
   pluginMarkerBlocks,
+  pluginPostApplyMessages,
   resolvePluginId,
   withPlugin,
 } from "../lib/plugins.ts";
@@ -17,6 +19,7 @@ export interface PluginAddResult {
   pluginId: PluginId;
   configChanged: boolean;
   markerStatuses: Array<{ path: string; status: UpsertStatus }>;
+  postApplyMessages: string[];
 }
 
 const STATUS_LABELS: Record<UpsertStatus, string> = {
@@ -90,13 +93,25 @@ export async function addPluginToWorkspace(
   }
 
   const markerStatuses = [];
+  await ensureDockerfileBaseIfNeeded(workspaceDir, after);
+  for (const block of pluginDockerfileBlocks(after)) {
+    const path = join(workspaceDir, block.path);
+    const status = await upsertBlock(path, block.startMarker, block.endMarker, block.contents);
+    markerStatuses.push({ path: block.path, status });
+  }
   for (const block of pluginMarkerBlocks(after)) {
     const path = join(workspaceDir, block.path);
     const status = await upsertBlock(path, block.startMarker, block.endMarker, block.contents);
     markerStatuses.push({ path: block.path, status });
   }
 
-  return { configPath, pluginId, configChanged, markerStatuses };
+  return {
+    configPath,
+    pluginId,
+    configChanged,
+    markerStatuses,
+    postApplyMessages: pluginPostApplyMessages(after),
+  };
 }
 
 function printPluginUsage(): void {
@@ -114,6 +129,9 @@ function printAddResult(result: PluginAddResult): void {
   for (const marker of result.markerStatuses) {
     console.log(`  ${marker.path.padEnd(34)} ${STATUS_LABELS[marker.status]}`);
   }
+  for (const message of result.postApplyMessages) {
+    console.log(`  note: ${message}`);
+  }
   console.log();
   console.log(`Added plugin '${result.pluginId}'.`);
 }
@@ -129,4 +147,23 @@ async function readConfigIfPresent(path: string): Promise<ApfelkaefigConfig | nu
 
 function renderConfig(config: ApfelkaefigConfig): string {
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+const EMBEDDED_BASE_DOCKERFILE_URL = new URL("../../image/Dockerfile", import.meta.url);
+
+async function ensureDockerfileBaseIfNeeded(
+  workspaceDir: string,
+  config: ApfelkaefigConfig,
+): Promise<void> {
+  if (pluginDockerfileBlocks(config).length === 0) return;
+  const dockerfilePath = join(workspaceDir, ".devcontainer/Dockerfile");
+  try {
+    await Deno.lstat(dockerfilePath);
+    return;
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) throw err;
+  }
+  await ensureDir(join(workspaceDir, ".devcontainer"));
+  const base = await Deno.readTextFile(EMBEDDED_BASE_DOCKERFILE_URL);
+  await Deno.writeTextFile(dockerfilePath, base.endsWith("\n") ? base : `${base}\n`);
 }

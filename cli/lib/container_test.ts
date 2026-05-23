@@ -113,6 +113,20 @@ Deno.test("buildRunArgs: custom command + extra env", () => {
   assert(envIdx > 0, "token not forwarded");
 });
 
+Deno.test("buildRunArgs: renders configured port forwards", () => {
+  const out = buildRunArgs({
+    resolved: resolved({
+      ports: [{ hostIp: "127.0.0.1", host: 3247, container: 3247, protocol: "tcp" }],
+    }),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+  });
+  const idx = out.args.indexOf("127.0.0.1:3247:3247/tcp");
+  assert(idx > 0, "port publish value missing");
+  assertEquals(out.args[idx - 1], "-p");
+});
+
 Deno.test("buildRunArgs: respects user + workspaceFolder overrides", () => {
   const out = buildRunArgs({
     resolved: resolved({ user: "alice", workspaceFolder: "/code" }),

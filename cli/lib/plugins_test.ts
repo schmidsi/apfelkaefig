@@ -37,10 +37,40 @@ Deno.test("withPlugin preserves unrelated config", () => {
   assertEquals(config.secrets?.onepassword, true);
 });
 
+Deno.test("withPlugin enables Crit config, image, and port", () => {
+  const config = withPlugin({ version: 1 }, "crit");
+  assertEquals(config.plugins?.crit, {
+    enabled: true,
+    agentIntegration: "claude-code",
+    installMethod: "pinned-release",
+    version: "v0.13.0",
+    port: 3247,
+  });
+  assertEquals(config.image, { dockerfile: ".devcontainer/Dockerfile" });
+  assertEquals(config.env, {
+    CRIT_HOST: "0.0.0.0",
+    CRIT_PORT: "3247",
+  });
+  assertEquals(config.ports, [{
+    hostIp: "127.0.0.1",
+    host: 3247,
+    container: 3247,
+    protocol: "tcp",
+  }]);
+});
+
 Deno.test("pluginMarkerBlocks returns 1Password guidance block", () => {
   const config = withPlugin({ version: 1 }, "1password");
   const blocks = pluginMarkerBlocks(config);
   assertEquals(blocks.length, 1);
   assertEquals(blocks[0].path, "CLAUDE.md");
   assertEquals(blocks[0].startMarker, "<!-- akf plugin: 1password start -->");
+});
+
+Deno.test("pluginMarkerBlocks returns Crit guidance block", () => {
+  const config = withPlugin({ version: 1 }, "crit");
+  const blocks = pluginMarkerBlocks(config);
+  assertEquals(blocks.length, 1);
+  assertEquals(blocks[0].path, "CLAUDE.md");
+  assertEquals(blocks[0].startMarker, "<!-- akf plugin: crit start -->");
 });

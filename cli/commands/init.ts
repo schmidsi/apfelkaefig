@@ -119,6 +119,9 @@ export async function runInit(
     for (const marker of p.markerStatuses) {
       console.log(`  ${marker.path.padEnd(34)} ${STATUS_LABELS[marker.status]}`);
     }
+    for (const message of p.postApplyMessages) {
+      console.log(`  note: ${message}`);
+    }
   }
   console.log();
 

@@ -80,3 +80,43 @@ Deno.test("eject --devcontainer: mountObjToString emits type=volume", async () =
     assert(volumeMount.includes("type=volume"), `expected type=volume, got: ${volumeMount}`);
   });
 });
+
+Deno.test("eject --devcontainer: emits forwardPorts", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        image: "node:22",
+        ports: [{ hostIp: "127.0.0.1", host: 3247, container: 3247, protocol: "tcp" }],
+      }),
+    );
+    const code = await runEject({ cwd: dir, target: "devcontainer" });
+    assertEquals(code, 0);
+    const dc = JSON.parse(
+      await Deno.readTextFile(join(dir, ".devcontainer", "devcontainer.json")),
+    );
+    assertEquals(dc.forwardPorts, [3247]);
+  });
+});
+
+Deno.test("eject --bash: emits publish flags", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        image: "node:22",
+        ports: [{ hostIp: "127.0.0.1", host: 3247, container: 3247, protocol: "tcp" }],
+      }),
+    );
+    const code = await runEject({ cwd: dir, target: "bash" });
+    assertEquals(code, 0);
+    const start = await Deno.readTextFile(join(dir, "start.sh"));
+    assert(
+      start.includes(`publish_flags+=(-p 127.0.0.1:3247:3247/tcp)`),
+      "publish flag missing",
+    );
+    assert(start.includes(`"\${publish_flags[@]}"`), "publish flags not passed to container run");
+  });
+});

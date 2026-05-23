@@ -11,6 +11,7 @@ import {
 import { ConfigError, findConfig, resolveConfig } from "../lib/config.ts";
 import { findOpToken, TruncatedTokenError } from "../lib/secrets.ts";
 import { builtInImage } from "../lib/baseimage.ts";
+import { pluginDoctorChecks } from "../lib/plugins.ts";
 
 const MIN_CONTAINER_MAJOR = 0;
 const MIN_CONTAINER_MINOR = 9;
@@ -165,6 +166,11 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
     } else {
       throw err;
     }
+  }
+
+  // Built-in plugin checks live with each plugin implementation.
+  if (resolved) {
+    checks.push(...await pluginDoctorChecks(resolved));
   }
 
   // Base image presence — info-only.
