@@ -9,7 +9,7 @@ import { runPluginCommand } from "./commands/plugin.ts";
 import { parsePluginList, PluginError } from "./lib/plugins.ts";
 import denoJson from "../deno.json" with { type: "json" };
 
-const USAGE = `akf — dev sandboxes on Apple container
+const USAGE = `akf — dev sandboxes on Apple container (der Käfer im Apfel)
 
 Usage:
   akf up [-- cmd args…]    Launch the sandbox (built-in image if no config).
