@@ -20,7 +20,8 @@ for themselves.
   top-level keys are a **hard error** — promote to `.devcontainer/devcontainer.json` (tier 3) when
   you outgrow the schema.
 - **Templates:** `templates/` (rendered by `akf init` / `akf eject`).
-- **Base image:** `image/Dockerfile`, embedded into the compiled binary via `deno compile --include`.
+- **Base image:** `image/Dockerfile`, embedded into the compiled binary via
+  `deno compile --include`.
 - **Tests:** `deno task test`. Build: `deno task compile` → `dist/akf`. Dev: `deno task dev <args>`.
 
 ## Conventions
@@ -28,10 +29,10 @@ for themselves.
 - **Three-tier model** (drive-by / akf-native / devcontainer-native — see README) shapes feature
   scope. Decide which tier a change belongs to before adding code.
 - **Marker-managed blocks** must be re-rendered idempotently by `akf init`, never hand-merged:
-  `<!-- akf:start -->` / `<!-- akf:end -->` in this file, `# >>> akf >>>` / `# <<< akf <<<` in
-  host `.gitignore`.
-- **Never touch `settings.local.json`** from `akf init` — `--dangerously-skip-permissions` makes
-  it dead config, and merging into it breaks user edits.
+  `<!-- akf:start -->` / `<!-- akf:end -->` in this file, `# >>> akf >>>` / `# <<< akf <<<` in host
+  `.gitignore`.
+- **Never touch `settings.local.json`** from `akf init` — `--dangerously-skip-permissions` makes it
+  dead config, and merging into it breaks user edits.
 
 ## Where things live
 

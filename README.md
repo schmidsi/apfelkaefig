@@ -85,9 +85,9 @@ needs them.
 ## Why
 
 Coding agents stop every few turns to ask permission. `--dangerously-skip-permissions` is only safe
-when the agent runs inside a VM whose only writable mounts are the workspace and `~/.claude` —
-which is what apfelkäfig sets up. See [`docs/notes/positioning.md`](docs/notes/positioning.md) for
-the competitive landscape and [`docs/notes/architecture.md`](docs/notes/architecture.md) for design
+when the agent runs inside a VM whose only writable mounts are the workspace and `~/.claude` — which
+is what apfelkäfig sets up. See [`docs/notes/positioning.md`](docs/notes/positioning.md) for the
+competitive landscape and [`docs/notes/architecture.md`](docs/notes/architecture.md) for design
 notes.
 
 ## Security model
