@@ -234,7 +234,12 @@ function renderDockerfile(config: TelegramConfig): string {
   lines.push(`    git clone "\$TELEGRAM_CLI_REPO" /tmp/tg && \\`);
   lines.push(`    cd /tmp/tg && \\`);
   lines.push(`    git checkout "\$TELEGRAM_CLI_SHA" && \\`);
-  lines.push(`    pnpm install && \\`);
+  // --shamefully-hoist gives rolldown a flat node_modules so it can require
+  // its native binding (@rolldown/binding-linux-arm64-gnu) via standard
+  // Node module lookup. --frozen-lockfile keeps the SHA pin reproducible.
+  // npm i -g for the last step because pnpm 10's global install needs
+  // PNPM_HOME (pnpm setup) and npm writes to /usr/local/bin which is on PATH.
+  lines.push(`    pnpm install --frozen-lockfile --shamefully-hoist && \\`);
   lines.push(`    pnpm pack && \\`);
   lines.push(`    npm install -g ./telegram-*.tgz && \\`);
   lines.push(`    cd / && rm -rf /tmp/tg`);

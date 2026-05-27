@@ -27,7 +27,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
       amd64) NODE_ARCH=x64 ;; \
       *) echo "unsupported arch $ARCH" && exit 1 ;; \
     esac && \
-    NODE_VERSION=v22.11.0 && \
+    NODE_VERSION=v22.20.0 && \
     curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
     | tar -xJ --strip-components=1 -C /usr/local
 
