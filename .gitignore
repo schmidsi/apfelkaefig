@@ -9,3 +9,4 @@ dist/akf
 # >>> akf >>>
 .akf/
 # <<< akf <<<
+.claude/settings.local.json
