@@ -23,6 +23,11 @@ export interface UpOptions {
   // means use the resolved config's command (or default).
   positional: string[];
   imageOverride?: string;
+  // Force the image to be rebuilt (or re-pulled) even when it's already
+  // cached in Apple `container`. Used to pick up Dockerfile changes after
+  // bumping a pinned dependency, since the existence check would otherwise
+  // skip the build entirely.
+  rebuild?: boolean;
   run?: Runner;
 }
 
@@ -74,10 +79,15 @@ export async function runUp(opts: UpOptions): Promise<number> {
   // Ensure container system is up.
   await ensureContainerSystem(run);
 
-  // Image presence check + recovery path.
-  if (!(await imageExists(image.ref, run))) {
+  // Image presence check + recovery path. --rebuild forces the build/pull
+  // path even when the image is cached — needed when the Dockerfile content
+  // has changed (e.g. a bumped pinned SHA) but the tag has not.
+  const needsRefresh = opts.rebuild || !(await imageExists(image.ref, run));
+  if (needsRefresh) {
     if (image.needsBuild) {
-      if (isBuiltInBuild) {
+      if (opts.rebuild) {
+        console.error(`akf up: --rebuild — rebuilding '${image.ref}' from ${image.dockerfile}…`);
+      } else if (isBuiltInBuild) {
         console.error(
           `akf up: built-in base image '${image.ref}' not cached — building (one-time, takes a minute or two)…`,
         );
@@ -94,7 +104,11 @@ export async function runUp(opts: UpOptions): Promise<number> {
       });
       if (buildCode !== 0) return buildCode;
     } else {
-      console.error(`akf up: pulling ${image.ref}…`);
+      console.error(
+        opts.rebuild
+          ? `akf up: --rebuild — re-pulling ${image.ref}…`
+          : `akf up: pulling ${image.ref}…`,
+      );
       const pullRes = await pullImage(image.ref, run);
       if (pullRes.code !== 0) {
         console.error(

@@ -12,7 +12,9 @@ import denoJson from "../deno.json" with { type: "json" };
 const USAGE = `akf — dev sandboxes on Apple container (der Käfer im Apfel)
 
 Usage:
-  akf up [-- cmd args…]    Launch the sandbox (built-in image if no config).
+  akf up [--rebuild] [-- cmd args…]
+                           Launch the sandbox (built-in image if no config).
+                           --rebuild forces an image rebuild/refresh.
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
   akf plugin list|explain|add
@@ -84,6 +86,7 @@ async function main(argv: string[]): Promise<number> {
 async function dispatchUp(rest: string[]): Promise<number> {
   const flags = parseArgs(rest, {
     string: ["image"],
+    boolean: ["rebuild"],
     "--": true,
   });
   const positional = [
@@ -94,6 +97,7 @@ async function dispatchUp(rest: string[]): Promise<number> {
     cwd: Deno.cwd(),
     positional,
     imageOverride: flags.image,
+    rebuild: flags.rebuild,
   });
 }
 
