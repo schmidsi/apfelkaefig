@@ -151,3 +151,67 @@ Deno.test("init --plugins crit writes plugin config", async () => {
     assertEquals(config.ports[0].host, 3247);
   });
 });
+
+Deno.test("plugin add telegram writes config, Dockerfile block, and volume mounts", async () => {
+  await withTmpDir(async (dir) => {
+    const result = await addPluginToWorkspace({ cwd: dir, plugin: "tg" });
+    assertEquals(result.pluginId, "telegram");
+    assertEquals(result.configChanged, true);
+
+    const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
+    assertEquals(config.plugins.telegram.enabled, true);
+    assertEquals(config.plugins.telegram.storage, "instance");
+    assertEquals(config.image, { dockerfile: ".devcontainer/Dockerfile" });
+    assertEquals(config.mounts.length, 2);
+    assertEquals(config.mounts[0].type, "volume");
+    assertEquals(config.mounts[0].target, "/home/node/.config/telegram-cli");
+
+    const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
+    assert(dockerfile.includes("# >>> akf plugin: telegram"));
+    assert(dockerfile.includes("https://github.com/gskril/telegram-cli.git"));
+    assert(dockerfile.includes("npm install -g pnpm@"));
+
+    const claude = await Deno.readTextFile(join(dir, "CLAUDE.md"));
+    assert(claude.includes("telegram setup"));
+    assert(result.postApplyMessages.some((m) => m.includes("akf up -- telegram setup")));
+  });
+});
+
+Deno.test("plugin add telegram is idempotent", async () => {
+  await withTmpDir(async (dir) => {
+    await addPluginToWorkspace({ cwd: dir, plugin: "telegram" });
+    const second = await addPluginToWorkspace({ cwd: dir, plugin: "telegram" });
+    assertEquals(second.configChanged, false);
+    assertEquals(second.markerStatuses, [
+      { path: ".devcontainer/Dockerfile", status: "skipped-present" },
+      { path: "CLAUDE.md", status: "skipped-present" },
+    ]);
+  });
+});
+
+Deno.test("plugin add telegram with userIsolation renders sudo wrapper block", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        plugins: {
+          telegram: {
+            enabled: true,
+            repo: "https://github.com/gskril/telegram-cli.git",
+            sha: "95612b198c449f3768756f7e5ecd075fe6330b07",
+            storage: "instance",
+            userIsolation: true,
+          },
+        },
+      }),
+    );
+    await addPluginToWorkspace({ cwd: dir, plugin: "telegram" });
+    const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
+    assert(dockerfile.includes("useradd -r -m -d /home/telegram"));
+    assert(dockerfile.includes("sudo -u telegram"));
+    assert(dockerfile.includes("/etc/sudoers.d/akf-telegram"));
+    const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
+    assertEquals(config.mounts[0].target, "/home/telegram/.config/telegram-cli");
+  });
+});

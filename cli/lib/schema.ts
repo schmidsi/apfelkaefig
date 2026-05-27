@@ -41,9 +41,23 @@ export interface CritPluginConfig {
   [key: string]: unknown;
 }
 
+export type TelegramStorage = "instance" | "named" | "host";
+
+export interface TelegramPluginConfig {
+  enabled: boolean;
+  repo: string;
+  sha: string;
+  storage: TelegramStorage;
+  userIsolation: boolean;
+  configVolume?: string;
+  stateVolume?: string;
+  [key: string]: unknown;
+}
+
 export interface PluginConfigMap {
   "1password"?: OnePasswordPluginConfig;
   "crit"?: CritPluginConfig;
+  "telegram"?: TelegramPluginConfig;
 }
 
 export type ImageConfig =

@@ -11,7 +11,7 @@ export const onePasswordPlugin: BuiltInPlugin = {
   aliases: ["1pw", "op"],
   description: "Forward OP_SERVICE_ACCOUNT_TOKEN and document op read usage inside the sandbox.",
   defaultConfig: { enabled: true },
-  applyConfig(base, config) {
+  applyConfig(base, config, _ctx) {
     if (!config.enabled) return base;
     return {
       ...base,

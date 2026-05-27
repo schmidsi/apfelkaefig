@@ -364,6 +364,62 @@ function validatePluginConfig(id: string, v: unknown, sourcePath?: string): void
       );
     }
   }
+  if (id === "telegram") {
+    const allowed = [
+      "enabled",
+      "repo",
+      "sha",
+      "storage",
+      "userIsolation",
+      "configVolume",
+      "stateVolume",
+    ];
+    for (const k of Object.keys(cfg)) {
+      if (!allowed.includes(k)) {
+        throw new ConfigError(`'plugins.${id}' has unknown key '${k}'`, sourcePath);
+      }
+    }
+    if (cfg.enabled !== true && cfg.enabled !== false) {
+      throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
+    }
+    if (typeof cfg.repo !== "string" || !/^https:\/\/[^\s]+\.git$/.test(cfg.repo)) {
+      throw new ConfigError(
+        `'plugins.${id}.repo' must be an https git URL ending in .git`,
+        sourcePath,
+      );
+    }
+    if (typeof cfg.sha !== "string" || !/^[a-f0-9]{40}$/.test(cfg.sha)) {
+      throw new ConfigError(
+        `'plugins.${id}.sha' must be a 40-char lowercase hex commit SHA`,
+        sourcePath,
+      );
+    }
+    if (cfg.storage !== "instance" && cfg.storage !== "named" && cfg.storage !== "host") {
+      throw new ConfigError(
+        `'plugins.${id}.storage' must be 'instance', 'named', or 'host'`,
+        sourcePath,
+      );
+    }
+    if (cfg.userIsolation !== true && cfg.userIsolation !== false) {
+      throw new ConfigError(`'plugins.${id}.userIsolation' must be a boolean`, sourcePath);
+    }
+    if (cfg.userIsolation === true && cfg.storage === "host") {
+      throw new ConfigError(
+        `'plugins.${id}.userIsolation' cannot be true when storage is 'host'`,
+        sourcePath,
+      );
+    }
+    for (const key of ["configVolume", "stateVolume"] as const) {
+      if (key in cfg && cfg[key] !== undefined) {
+        if (typeof cfg[key] !== "string" || !VOLUME_NAME_RE.test(cfg[key] as string)) {
+          throw new ConfigError(
+            `'plugins.${id}.${key}' must match ${VOLUME_NAME_RE}`,
+            sourcePath,
+          );
+        }
+      }
+    }
+  }
 }
 
 // Resolve the active config according to the chain documented in tasks/004_refactor.md:

@@ -277,6 +277,123 @@ Deno.test("validate rejects malformed crit plugin config", () => {
   );
 });
 
+Deno.test("validate accepts telegram plugin config", () => {
+  const c = validate({
+    version: 1,
+    plugins: {
+      telegram: {
+        enabled: true,
+        repo: "https://github.com/gskril/telegram-cli.git",
+        sha: "95612b198c449f3768756f7e5ecd075fe6330b07",
+        storage: "instance",
+        userIsolation: false,
+      },
+    },
+  });
+  assertEquals(c.plugins?.telegram?.storage, "instance");
+});
+
+Deno.test("validate rejects non-https telegram repo", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          telegram: {
+            enabled: true,
+            repo: "git@github.com:gskril/telegram-cli.git",
+            sha: "95612b198c449f3768756f7e5ecd075fe6330b07",
+            storage: "instance",
+            userIsolation: false,
+          },
+        },
+      }),
+    ConfigError,
+    "must be an https git URL",
+  );
+});
+
+Deno.test("validate rejects telegram sha that is not 40-hex", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          telegram: {
+            enabled: true,
+            repo: "https://github.com/gskril/telegram-cli.git",
+            sha: "abc123",
+            storage: "instance",
+            userIsolation: false,
+          },
+        },
+      }),
+    ConfigError,
+    "40-char lowercase hex",
+  );
+});
+
+Deno.test("validate rejects telegram storage outside the enum", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          telegram: {
+            enabled: true,
+            repo: "https://github.com/gskril/telegram-cli.git",
+            sha: "95612b198c449f3768756f7e5ecd075fe6330b07",
+            storage: "tmpfs",
+            userIsolation: false,
+          },
+        },
+      }),
+    ConfigError,
+    "storage",
+  );
+});
+
+Deno.test("validate rejects telegram userIsolation=true with storage=host", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          telegram: {
+            enabled: true,
+            repo: "https://github.com/gskril/telegram-cli.git",
+            sha: "95612b198c449f3768756f7e5ecd075fe6330b07",
+            storage: "host",
+            userIsolation: true,
+          },
+        },
+      }),
+    ConfigError,
+    "cannot be true when storage is 'host'",
+  );
+});
+
+Deno.test("validate rejects telegram unknown keys", () => {
+  assertThrows(
+    () =>
+      validate({
+        version: 1,
+        plugins: {
+          telegram: {
+            enabled: true,
+            repo: "https://github.com/gskril/telegram-cli.git",
+            sha: "95612b198c449f3768756f7e5ecd075fe6330b07",
+            storage: "instance",
+            userIsolation: false,
+            mystery: 1,
+          },
+        },
+      }),
+    ConfigError,
+    "unknown key 'mystery'",
+  );
+});
+
 Deno.test("parseConfig accepts JSONC with comments and trailing commas", () => {
   const text = `{
     // this is a comment

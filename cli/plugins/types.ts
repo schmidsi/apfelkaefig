@@ -15,6 +15,10 @@ export interface MarkerBlock {
   contents: string;
 }
 
+export interface PluginContext {
+  workspaceDir: string;
+}
+
 export interface PluginDoctorContext {
   config: ApfelkaefigConfig;
   workspaceDir: string;
@@ -24,8 +28,14 @@ export interface BuiltInPlugin {
   id: keyof PluginConfigMap;
   aliases: string[];
   description: string;
-  defaultConfig: Record<string, unknown>;
-  applyConfig: (base: ApfelkaefigConfig, config: Record<string, unknown>) => ApfelkaefigConfig;
+  defaultConfig:
+    | Record<string, unknown>
+    | ((ctx: PluginContext) => Record<string, unknown>);
+  applyConfig: (
+    base: ApfelkaefigConfig,
+    config: Record<string, unknown>,
+    ctx: PluginContext,
+  ) => ApfelkaefigConfig;
   markerBlocks: (config: Record<string, unknown>) => MarkerBlock[];
   dockerfileBlocks?: (config: Record<string, unknown>) => MarkerBlock[];
   doctorChecks?: (

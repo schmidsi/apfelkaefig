@@ -1,15 +1,22 @@
 import { type ApfelkaefigConfig, type PluginConfigMap, SCHEMA_URL } from "./schema.ts";
-import { type BuiltInPlugin, type MarkerBlock, type PluginDoctorCheck } from "../plugins/types.ts";
+import {
+  type BuiltInPlugin,
+  type MarkerBlock,
+  type PluginContext,
+  type PluginDoctorCheck,
+} from "../plugins/types.ts";
 import { onePasswordPlugin } from "../plugins/1password/plugin.ts";
 import { critPlugin } from "../plugins/crit/plugin.ts";
+import { telegramPlugin } from "../plugins/telegram/plugin.ts";
 
-export type { BuiltInPlugin, MarkerBlock, PluginDoctorCheck };
+export type { BuiltInPlugin, MarkerBlock, PluginContext, PluginDoctorCheck };
 
 export type PluginId = keyof PluginConfigMap;
 
 const REGISTRY: Record<PluginId, BuiltInPlugin> = {
   "1password": onePasswordPlugin,
   "crit": critPlugin,
+  "telegram": telegramPlugin,
 };
 
 const ALIASES = new Map<string, PluginId>();
@@ -64,10 +71,14 @@ export function parsePluginList(input: string): PluginId[] {
 export function withPlugin(
   config: ApfelkaefigConfig,
   id: PluginId,
+  ctx: PluginContext,
 ): ApfelkaefigConfig {
   const plugin = getPlugin(id);
   const existing = config.plugins?.[id] as Record<string, unknown> | undefined;
-  const pluginConfig = { ...plugin.defaultConfig, ...(existing ?? {}), enabled: true };
+  const defaults = typeof plugin.defaultConfig === "function"
+    ? plugin.defaultConfig(ctx)
+    : plugin.defaultConfig;
+  const pluginConfig = { ...defaults, ...(existing ?? {}), enabled: true };
   const next: ApfelkaefigConfig = {
     $schema: config.$schema ?? SCHEMA_URL,
     ...config,
@@ -76,7 +87,7 @@ export function withPlugin(
       [id]: pluginConfig,
     },
   };
-  return plugin.applyConfig(next, pluginConfig);
+  return plugin.applyConfig(next, pluginConfig, ctx);
 }
 
 export function pluginMarkerBlocks(config: ApfelkaefigConfig): MarkerBlock[] {

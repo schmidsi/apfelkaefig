@@ -82,7 +82,11 @@ export async function addPluginToWorkspace(
   const workspaceDir = found.dir;
   const configPath = found.apfelkaefig ?? join(workspaceDir, ".apfelkaefig.json");
   const before = await readConfigIfPresent(configPath);
-  const after = withPlugin(before ?? { $schema: SCHEMA_URL, version: SCHEMA_VERSION }, pluginId);
+  const after = withPlugin(
+    before ?? { $schema: SCHEMA_URL, version: SCHEMA_VERSION },
+    pluginId,
+    { workspaceDir },
+  );
 
   const beforeText = before ? renderConfig(before) : null;
   const afterText = renderConfig(after);
