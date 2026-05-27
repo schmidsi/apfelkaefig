@@ -4,12 +4,13 @@ import {
   type MarkerBlock,
   type PluginContext,
   type PluginDoctorCheck,
+  type SetupStep,
 } from "../plugins/types.ts";
 import { onePasswordPlugin } from "../plugins/1password/plugin.ts";
 import { critPlugin } from "../plugins/crit/plugin.ts";
 import { telegramPlugin } from "../plugins/telegram/plugin.ts";
 
-export type { BuiltInPlugin, MarkerBlock, PluginContext, PluginDoctorCheck };
+export type { BuiltInPlugin, MarkerBlock, PluginContext, PluginDoctorCheck, SetupStep };
 
 export type PluginId = keyof PluginConfigMap;
 
@@ -132,4 +133,14 @@ export function pluginPostApplyMessages(config: ApfelkaefigConfig): string[] {
     messages.push(...(plugin.postApplyMessages?.(pluginConfig as Record<string, unknown>) ?? []));
   }
   return messages;
+}
+
+export function pluginSetupSteps(config: ApfelkaefigConfig): SetupStep[] {
+  const steps: SetupStep[] = [];
+  for (const [id, pluginConfig] of Object.entries(config.plugins ?? {})) {
+    if (!pluginConfig?.enabled) continue;
+    const plugin = getPlugin(id as PluginId);
+    steps.push(...(plugin.setupSteps?.(pluginConfig as Record<string, unknown>) ?? []));
+  }
+  return steps;
 }

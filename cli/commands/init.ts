@@ -18,7 +18,7 @@ import {
   type WriteStatus,
 } from "../lib/fs.ts";
 import { GITIGNORE_MARKERS, MARKDOWN_MARKERS } from "../lib/markers.ts";
-import { addPluginToWorkspace, type PluginAddResult } from "./plugin.ts";
+import { addPluginToWorkspace, formatSetupStep, type PluginAddResult } from "./plugin.ts";
 
 export type InitMode = "default" | "advanced" | "bash";
 
@@ -119,9 +119,6 @@ export async function runInit(
     for (const marker of p.markerStatuses) {
       console.log(`  ${marker.path.padEnd(34)} ${STATUS_LABELS[marker.status]}`);
     }
-    for (const message of p.postApplyMessages) {
-      console.log(`  note: ${message}`);
-    }
   }
   console.log();
 
@@ -134,14 +131,35 @@ export async function runInit(
     return;
   }
 
+  const setupSteps = pluginReports.flatMap((p) => p.setupSteps);
+  const notes = pluginReports.flatMap((p) => p.postApplyMessages);
+
   console.log("Next steps:");
   if (mode === "bash") {
-    console.log("  1. ./build.sh          # build the sandbox image (one-time)");
-    console.log("  2. ./start.sh          # launch Claude Code inside the sandbox");
+    let i = 1;
+    for (const step of setupSteps) {
+      console.log(`  ${i++}. ${formatSetupStep(step)}`);
+    }
+    console.log(`  ${i++}. ./build.sh              # build the sandbox image (one-time)`);
+    console.log(`  ${i}. ./start.sh              # launch Claude Code inside the sandbox`);
+  } else if (setupSteps.length > 0) {
+    let i = 1;
+    for (const step of setupSteps) {
+      console.log(`  ${i++}. ${formatSetupStep(step)}`);
+    }
+    console.log(`  ${i}. akf up                              # launch Claude in the sandbox`);
   } else {
     console.log("  akf up                 # launch the sandbox");
     if (mode === "advanced") {
       console.log("                         # or open in VS Code → Reopen in Container");
+    }
+  }
+
+  if (notes.length > 0) {
+    console.log();
+    console.log("Notes:");
+    for (const message of notes) {
+      console.log(`  ${message}`);
     }
   }
 }

@@ -19,6 +19,11 @@ export interface PluginContext {
   workspaceDir: string;
 }
 
+export interface SetupStep {
+  command: string;
+  description: string;
+}
+
 export interface PluginDoctorContext {
   config: ApfelkaefigConfig;
   workspaceDir: string;
@@ -42,5 +47,9 @@ export interface BuiltInPlugin {
     resolved: PluginDoctorContext,
     config: Record<string, unknown>,
   ) => Promise<PluginDoctorCheck[]>;
+  // Interactive bootstrap commands the user must run once after the image
+  // builds. Surfaced as numbered next-steps in `akf init` / `akf plugin add`.
+  setupSteps?: (config: Record<string, unknown>) => SetupStep[];
+  // Informational notes (storage mode explanations, etc). Pure prose, not commands.
   postApplyMessages?: (config: Record<string, unknown>) => string[];
 }

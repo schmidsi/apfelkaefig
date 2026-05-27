@@ -9,7 +9,9 @@ import {
   type PluginId,
   pluginMarkerBlocks,
   pluginPostApplyMessages,
+  pluginSetupSteps,
   resolvePluginId,
+  type SetupStep,
   withPlugin,
 } from "../lib/plugins.ts";
 import { type ApfelkaefigConfig, SCHEMA_URL, SCHEMA_VERSION } from "../lib/schema.ts";
@@ -19,6 +21,7 @@ export interface PluginAddResult {
   pluginId: PluginId;
   configChanged: boolean;
   markerStatuses: Array<{ path: string; status: UpsertStatus }>;
+  setupSteps: SetupStep[];
   postApplyMessages: string[];
 }
 
@@ -114,6 +117,7 @@ export async function addPluginToWorkspace(
     pluginId,
     configChanged,
     markerStatuses,
+    setupSteps: pluginSetupSteps(after),
     postApplyMessages: pluginPostApplyMessages(after),
   };
 }
@@ -133,11 +137,28 @@ function printAddResult(result: PluginAddResult): void {
   for (const marker of result.markerStatuses) {
     console.log(`  ${marker.path.padEnd(34)} ${STATUS_LABELS[marker.status]}`);
   }
-  for (const message of result.postApplyMessages) {
-    console.log(`  note: ${message}`);
-  }
   console.log();
   console.log(`Added plugin '${result.pluginId}'.`);
+  if (result.setupSteps.length > 0) {
+    console.log();
+    console.log("Next steps:");
+    let i = 1;
+    for (const step of result.setupSteps) {
+      console.log(`  ${i++}. ${formatSetupStep(step)}`);
+    }
+    console.log(`  ${i}. akf up                              # launch the sandbox`);
+  }
+  if (result.postApplyMessages.length > 0) {
+    console.log();
+    console.log("Notes:");
+    for (const message of result.postApplyMessages) {
+      console.log(`  ${message}`);
+    }
+  }
+}
+
+export function formatSetupStep(step: SetupStep): string {
+  return `${step.command.padEnd(36)} # ${step.description}`;
 }
 
 async function readConfigIfPresent(path: string): Promise<ApfelkaefigConfig | null> {

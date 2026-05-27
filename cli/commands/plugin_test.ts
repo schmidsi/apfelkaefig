@@ -104,7 +104,7 @@ Deno.test("plugin add crit creates config, Dockerfile block, and guidance", asyn
 
     const claude = await Deno.readTextFile(join(dir, "CLAUDE.md"));
     assert(claude.includes("akf up -- crit install claude-code"));
-    assert(result.postApplyMessages.some((m) => m.includes("crit install claude-code")));
+    assert(result.setupSteps.some((s) => s.command.includes("crit install claude-code")));
   });
 });
 
@@ -173,7 +173,9 @@ Deno.test("plugin add telegram writes config, Dockerfile block, and volume mount
 
     const claude = await Deno.readTextFile(join(dir, "CLAUDE.md"));
     assert(claude.includes("telegram setup"));
-    assert(result.postApplyMessages.some((m) => m.includes("akf up -- telegram setup")));
+    assert(result.setupSteps.some((s) => s.command === "akf up -- telegram setup"));
+    assert(result.setupSteps.some((s) => s.command === "akf up -- telegram auth"));
+    assert(result.postApplyMessages.some((m) => m.includes("storage='instance'")));
   });
 });
 

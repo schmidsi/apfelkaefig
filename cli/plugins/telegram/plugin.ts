@@ -21,6 +21,7 @@ import type {
   PluginContext,
   PluginDoctorCheck,
   PluginDoctorContext,
+  SetupStep,
 } from "../types.ts";
 import type { ApfelkaefigConfig, MountConfig, TelegramStorage } from "../../lib/schema.ts";
 
@@ -125,13 +126,15 @@ export const telegramPlugin: BuiltInPlugin = {
     checks.push(await upstreamCheck(config));
     return checks;
   },
+  setupSteps(_raw): SetupStep[] {
+    return [
+      { command: "akf up -- telegram setup", description: "API credentials from my.telegram.org" },
+      { command: "akf up -- telegram auth", description: "interactive Telegram login" },
+    ];
+  },
   postApplyMessages(raw) {
     const config = raw as unknown as TelegramConfig;
-    const lines: string[] = [
-      "After building the image, run inside the sandbox:",
-      "  akf up -- telegram setup    # API credentials from my.telegram.org",
-      "  akf up -- telegram auth     # interactive Telegram login",
-    ];
+    const lines: string[] = [];
     if (config.storage === "instance") {
       lines.push(
         "storage='instance' — this clone has its own session; clones in other paths re-auth separately.",

@@ -85,9 +85,16 @@ export const critPlugin: BuiltInPlugin = {
   async doctorChecks(resolved, _config) {
     return await critDoctorChecks(resolved);
   },
+  setupSteps(_config) {
+    return [
+      {
+        command: "akf up -- crit install claude-code",
+        description: "install Crit's Claude Code project integration",
+      },
+    ];
+  },
   postApplyMessages(_config) {
     return [
-      "After building the image, run: akf up -- crit install claude-code",
       "Crit UI will be published at http://127.0.0.1:3247 when Crit is running.",
     ];
   },
