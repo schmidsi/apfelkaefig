@@ -247,10 +247,31 @@ function renderDockerfile(config: TelegramConfig): string {
   lines.push(`    npm install -g ./telegram-*.tgz && \\`);
   lines.push(`    cd / && rm -rf /tmp/tg`);
 
-  if (config.userIsolation) {
+  // Setup branches by (storage, userIsolation). Three live combinations
+  // (userIsolation=true + storage=host is rejected by the schema):
+  //   1. storage='host', userIsolation=false  → bind mount, UID-mapped by Apple
+  //      container; no runtime chown needed.
+  //   2. storage∈{instance,named}, userIsolation=false → named volumes mount as
+  //      root-owned and override our pre-created node ownership. Install a
+  //      sudo-chown wrapper that re-chowns the mountpoints on each invocation.
+  //   3. storage∈{instance,named}, userIsolation=true → same chown problem plus
+  //      the dedicated 'telegram' user; the wrapper chowns to telegram:telegram
+  //      and sudos to that user before exec.
+  if (config.storage === "host") {
     lines.push(``);
-    lines.push(`# userIsolation=true: shadow the CLI with a sudo wrapper so the agent`);
-    lines.push(`# user (\`${NODE_USER}\`) can invoke telegram but cannot read the session DB.`);
+    lines.push(`# storage='host': bind mount uses Apple container's host UID mapping,`);
+    lines.push(`# so no runtime chown is needed. Pre-create dirs to avoid stat noise.`);
+    lines.push(`RUN mkdir -p ${targets.configDir} ${targets.stateDir} && \\`);
+    lines.push(
+      `    chown -R ${NODE_USER}:${NODE_USER} /home/${NODE_USER}/.config /home/${NODE_USER}/.local && \\`,
+    );
+    lines.push(`    chmod 700 ${targets.configDir} ${targets.stateDir}`);
+  } else if (config.userIsolation) {
+    lines.push(``);
+    lines.push(`# userIsolation=true: dedicated 'telegram' user owns the session.`);
+    lines.push(`# Node user reaches the CLI only through sudo, cannot read the session DB.`);
+    lines.push(`# The wrapper additionally chowns the volume mountpoints because Apple`);
+    lines.push(`# container mounts named volumes as root, overriding image-time ownership.`);
     lines.push(`RUN mv /usr/local/bin/telegram /usr/local/bin/telegram-real && \\`);
     lines.push(
       `    useradd -r -m -d /home/${TELEGRAM_USER} -s /usr/sbin/nologin ${TELEGRAM_USER} && \\`,
@@ -262,27 +283,48 @@ function renderDockerfile(config: TelegramConfig): string {
     );
     lines.push(`    chmod 700 ${targets.configDir} ${targets.stateDir} && \\`);
     lines.push(
-      `    printf '#!/bin/sh\\nexec sudo -u ${TELEGRAM_USER} /usr/local/bin/telegram-real "\$@"\\n' \\`,
+      `    printf '#!/bin/sh\\nchown -R ${TELEGRAM_USER}:${TELEGRAM_USER} ${targets.configDir} ${targets.stateDir}\\nchmod 700 ${targets.configDir} ${targets.stateDir}\\n' \\`,
+    );
+    lines.push(`      > /usr/local/bin/akf-telegram-init.sh && \\`);
+    lines.push(`    chmod +x /usr/local/bin/akf-telegram-init.sh && \\`);
+    lines.push(
+      `    printf '#!/bin/sh\\nsudo /usr/local/bin/akf-telegram-init.sh 2>/dev/null || true\\nexec sudo -u ${TELEGRAM_USER} /usr/local/bin/telegram-real "\$@"\\n' \\`,
     );
     lines.push(`      > /usr/local/bin/telegram && \\`);
     lines.push(`    chmod +x /usr/local/bin/telegram && \\`);
     lines.push(
-      `    echo "${NODE_USER} ALL=(${TELEGRAM_USER}) NOPASSWD: /usr/local/bin/telegram-real" \\`,
+      `    printf '${NODE_USER} ALL=(root) NOPASSWD: /usr/local/bin/akf-telegram-init.sh\\n${NODE_USER} ALL=(${TELEGRAM_USER}) NOPASSWD: /usr/local/bin/telegram-real\\n' \\`,
     );
     lines.push(`      > /etc/sudoers.d/akf-telegram && \\`);
     lines.push(`    chmod 0440 /etc/sudoers.d/akf-telegram && \\`);
     lines.push(`    visudo -c -f /etc/sudoers.d/akf-telegram`);
   } else {
     lines.push(``);
-    lines.push(`# Pre-create the session dirs as ${NODE_USER} so named volumes mount with`);
-    lines.push(
-      `# the right ownership (Apple \`container\` inherits dir ownership on first mount).`,
-    );
+    lines.push(`# Apple container's named volume mounts as root-owned on first use,`);
+    lines.push(`# overriding image-time chown. Wrap the CLI so it sudo-chowns the`);
+    lines.push(`# mountpoints to ${NODE_USER}:${NODE_USER} on every invocation. Idempotent.`);
     lines.push(`RUN mkdir -p ${targets.configDir} ${targets.stateDir} && \\`);
     lines.push(
       `    chown -R ${NODE_USER}:${NODE_USER} /home/${NODE_USER}/.config /home/${NODE_USER}/.local && \\`,
     );
-    lines.push(`    chmod 700 ${targets.configDir} ${targets.stateDir}`);
+    lines.push(`    chmod 700 ${targets.configDir} ${targets.stateDir} && \\`);
+    lines.push(`    mv /usr/local/bin/telegram /usr/local/bin/telegram-real && \\`);
+    lines.push(
+      `    printf '#!/bin/sh\\nchown ${NODE_USER}:${NODE_USER} ${targets.configDir} ${targets.stateDir}\\nchmod 700 ${targets.configDir} ${targets.stateDir}\\n' \\`,
+    );
+    lines.push(`      > /usr/local/bin/akf-telegram-init.sh && \\`);
+    lines.push(`    chmod +x /usr/local/bin/akf-telegram-init.sh && \\`);
+    lines.push(
+      `    printf '#!/bin/sh\\nsudo /usr/local/bin/akf-telegram-init.sh 2>/dev/null || true\\nexec /usr/local/bin/telegram-real "\$@"\\n' \\`,
+    );
+    lines.push(`      > /usr/local/bin/telegram && \\`);
+    lines.push(`    chmod +x /usr/local/bin/telegram && \\`);
+    lines.push(
+      `    echo "${NODE_USER} ALL=(root) NOPASSWD: /usr/local/bin/akf-telegram-init.sh" \\`,
+    );
+    lines.push(`      > /etc/sudoers.d/akf-telegram && \\`);
+    lines.push(`    chmod 0440 /etc/sudoers.d/akf-telegram && \\`);
+    lines.push(`    visudo -c -f /etc/sudoers.d/akf-telegram`);
   }
 
   return lines.join("\n");

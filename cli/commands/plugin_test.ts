@@ -170,6 +170,11 @@ Deno.test("plugin add telegram writes config, Dockerfile block, and volume mount
     assert(dockerfile.includes("# >>> akf plugin: telegram"));
     assert(dockerfile.includes("https://github.com/gskril/telegram-cli.git"));
     assert(dockerfile.includes("npm install -g pnpm@"));
+    // Apple container's named-volume mount overrides image-time ownership,
+    // so the plugin shadows the CLI with a sudo-chown wrapper.
+    assert(dockerfile.includes("/usr/local/bin/telegram-real"));
+    assert(dockerfile.includes("akf-telegram-init.sh"));
+    assert(dockerfile.includes("/etc/sudoers.d/akf-telegram"));
 
     const claude = await Deno.readTextFile(join(dir, "CLAUDE.md"));
     assert(claude.includes("telegram setup"));
