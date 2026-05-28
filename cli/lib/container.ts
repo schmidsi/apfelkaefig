@@ -113,7 +113,8 @@ export function buildRunArgs(
   // expose the user's Desktop. Sources that don't exist are silently skipped.
   const isDriveBy = input.resolved.source.kind === "defaults";
   if (home) {
-    pushMountIfExists(pushMount, `${home}/.claude`, `/home/${e.user}/.claude`, false);
+    const claudeSource = expandHome(sub(e.claudeConfigDir ?? `${home}/.claude`), home);
+    pushMountIfExists(pushMount, claudeSource, `/home/${e.user}/.claude`, false);
     if (!isDriveBy) {
       pushMountIfExists(pushMount, `${home}/Downloads`, `/home/${e.user}/Downloads`, true);
       pushMountIfExists(pushMount, `${home}/Desktop`, `/home/${e.user}/Desktop`, true);
@@ -141,6 +142,15 @@ export function buildRunArgs(
     workspaceFolder: sub(e.workspaceFolder),
     user: e.user,
   };
+}
+
+// Expand a leading `~` or `~/` to the host home dir. Mid-path tildes are
+// left alone — they're not a shell glob target here.
+function expandHome(p: string, home: string): string {
+  if (!home) return p;
+  if (p === "~") return home;
+  if (p.startsWith("~/")) return `${home}/${p.slice(2)}`;
+  return p;
 }
 
 function pushMountIfExists(

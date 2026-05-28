@@ -144,6 +144,10 @@
         }
       }
     },
+    "claudeConfigDir": {
+      "type": "string",
+      "description": "Override the host source path for the ~/.claude mount (default: ~/.claude). Supports a leading ~ and ${localEnv:VAR}/${localWorkspaceFolder} substitutions. Useful for isolating per-project Claude accounts (e.g. \"~/.claude-work\" vs \"~/.claude-personal\"). The container-side target stays /home/<user>/.claude."
+    },
     "plugins": {
       "type": "object",
       "additionalProperties": false,

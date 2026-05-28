@@ -77,6 +77,9 @@ export interface ApfelkaefigConfig {
   secrets?: SecretsConfig;
   ports?: PortConfig[];
   plugins?: PluginConfigMap;
+  // Overrides the host source path of the ~/.claude mount. Supports `~` and
+  // ${localEnv:VAR} substitutions. Default: `${HOME}/.claude`.
+  claudeConfigDir?: string;
 }
 
 // Defaults applied when a field is unset in the resolved config.
@@ -102,4 +105,5 @@ export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "secrets",
   "ports",
   "plugins",
+  "claudeConfigDir",
 ]);

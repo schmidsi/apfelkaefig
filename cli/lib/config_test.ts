@@ -574,6 +574,37 @@ Deno.test("effective applies defaults", () => {
   assertEquals(e.resources, { cpus: 2, memory: "4G" });
 });
 
+Deno.test("validate accepts claudeConfigDir as a string", () => {
+  const c = validate({ version: 1, claudeConfigDir: "~/.claude-work" });
+  assertEquals(c.claudeConfigDir, "~/.claude-work");
+});
+
+Deno.test("validate rejects non-string claudeConfigDir", () => {
+  assertThrows(
+    () => validate({ version: 1, claudeConfigDir: 42 }),
+    ConfigError,
+    "'claudeConfigDir' must be a string",
+  );
+});
+
+Deno.test("effective exposes claudeConfigDir when set, undefined otherwise", () => {
+  const undef = effective({
+    source: { kind: "defaults", dir: "/p" },
+    workspaceDir: "/p",
+    config: { version: 1 },
+    warnings: [],
+  });
+  assertEquals(undef.claudeConfigDir, undefined);
+
+  const set = effective({
+    source: { kind: "defaults", dir: "/p" },
+    workspaceDir: "/p",
+    config: { version: 1, claudeConfigDir: "~/.claude-ens" },
+    warnings: [],
+  });
+  assertEquals(set.claudeConfigDir, "~/.claude-ens");
+});
+
 Deno.test("effective splits string command on whitespace", () => {
   const e = effective({
     source: { kind: "defaults", dir: "/p" },

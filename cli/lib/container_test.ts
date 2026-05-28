@@ -180,6 +180,83 @@ Deno.test("buildRunArgs: drive-by mode skips ~/Downloads and ~/Desktop", async (
   }
 });
 
+Deno.test("buildRunArgs: claudeConfigDir overrides host source of ~/.claude mount", async () => {
+  const home = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${home}/.claude-ens`);
+
+    const cfg: ResolvedConfig = {
+      ...resolved({ claudeConfigDir: "~/.claude-ens" }),
+      source: {
+        kind: "apfelkaefig",
+        path: "/p/.apfelkaefig.json",
+        dir: "/p",
+        raw: { version: 1, claudeConfigDir: "~/.claude-ens" },
+      },
+    };
+    const out = buildRunArgs({
+      resolved: cfg,
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    const claudeMount = out.args.find((a) => a.endsWith(":/home/node/.claude"));
+    assertEquals(claudeMount, `${home}/.claude-ens:/home/node/.claude`);
+    // Default ~/.claude was not also mounted.
+    assert(
+      !out.args.some((a) => a === `${home}/.claude:/home/node/.claude`),
+      "default ~/.claude mount should not be emitted when claudeConfigDir is set",
+    );
+  } finally {
+    await Deno.remove(home, { recursive: true });
+  }
+});
+
+Deno.test("buildRunArgs: omits ~/.claude mount when claudeConfigDir source is missing", async () => {
+  const home = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${home}/.claude`); // exists, but should be ignored
+    const cfg: ResolvedConfig = {
+      ...resolved({ claudeConfigDir: "~/.does-not-exist" }),
+      source: {
+        kind: "apfelkaefig",
+        path: "/p/.apfelkaefig.json",
+        dir: "/p",
+        raw: { version: 1 },
+      },
+    };
+    const out = buildRunArgs({
+      resolved: cfg,
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    assert(
+      !out.args.some((a) => a.endsWith(":/home/node/.claude")),
+      "no claude mount should be emitted when override source is missing",
+    );
+  } finally {
+    await Deno.remove(home, { recursive: true });
+  }
+});
+
+Deno.test("buildRunArgs: default ~/.claude mount when claudeConfigDir unset", async () => {
+  const home = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${home}/.claude`);
+    const out = buildRunArgs({
+      resolved: resolved({}),
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    const claudeMount = out.args.find((a) => a.endsWith(":/home/node/.claude"));
+    assertEquals(claudeMount, `${home}/.claude:/home/node/.claude`);
+  } finally {
+    await Deno.remove(home, { recursive: true });
+  }
+});
+
 Deno.test("buildRunArgs: omits -t when tty=false (no-TTY callers)", () => {
   const out = buildRunArgs({
     resolved: resolved({}),

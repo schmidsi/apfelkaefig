@@ -133,6 +133,12 @@ export function validate(value: unknown, sourcePath?: string): ApfelkaefigConfig
   if ("secrets" in obj && obj.secrets !== undefined) validateSecrets(obj.secrets, sourcePath);
   if ("ports" in obj && obj.ports !== undefined) validatePorts(obj.ports, sourcePath);
   if ("plugins" in obj && obj.plugins !== undefined) validatePlugins(obj.plugins, sourcePath);
+  if (
+    "claudeConfigDir" in obj && obj.claudeConfigDir !== undefined &&
+    typeof obj.claudeConfigDir !== "string"
+  ) {
+    throw new ConfigError("'claudeConfigDir' must be a string", sourcePath);
+  }
 
   return obj as unknown as ApfelkaefigConfig;
 }
@@ -589,6 +595,7 @@ export function effective(resolved: ResolvedConfig): {
   workspaceFolder: string;
   command: string[];
   resources: { cpus: number; memory: string };
+  claudeConfigDir?: string;
 } {
   const c = resolved.config;
   const cmd = c.command === undefined
@@ -604,5 +611,6 @@ export function effective(resolved: ResolvedConfig): {
       cpus: c.resources?.cpus ?? DEFAULTS.resources.cpus,
       memory: c.resources?.memory ?? DEFAULTS.resources.memory,
     },
+    claudeConfigDir: c.claudeConfigDir,
   };
 }

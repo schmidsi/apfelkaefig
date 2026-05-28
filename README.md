@@ -61,6 +61,10 @@ Pick the lightest shape that fits; promote when you outgrow it.
   // Defaults to ghcr.io/apfelkaefig/base. Set a registry tag, or build locally:
   // "image": { "dockerfile": ".devcontainer/Dockerfile" },
 
+  // Use a per-project ~/.claude — handy when you juggle multiple Claude accounts.
+  // Default: "~/.claude". Container target stays /home/<user>/.claude.
+  // "claudeConfigDir": "~/.claude-work",
+
   "env": { "TZ": "UTC" },
   "command": ["claude", "--dangerously-skip-permissions"]
 }
