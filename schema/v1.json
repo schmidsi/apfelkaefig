@@ -17,7 +17,7 @@
       "const": 1
     },
     "image": {
-      "description": "The container image to launch. Omit to use the built-in ghcr.io/apfelkaefig/base image. Provide a string for a registry tag, or { dockerfile } to build locally.",
+      "description": "The container image to launch. Omit to use the built-in base image (built locally on first `akf up`). Provide a string for a registry tag, or { dockerfile } to build locally.",
       "oneOf": [
         {
           "type": "string",

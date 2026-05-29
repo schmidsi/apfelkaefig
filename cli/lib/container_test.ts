@@ -43,9 +43,9 @@ Deno.test("projectImageTag derives from workspace basename", () => {
 
 Deno.test("resolveImageRef: registry built-in (no Dockerfile) when image unset", () => {
   const r = resolveImageRef({ version: 1 }, "/p", {
-    ref: "ghcr.io/apfelkaefig/base@sha256:abc",
+    ref: "ghcr.io/example/base@sha256:abc",
   });
-  assertEquals(r.ref, "ghcr.io/apfelkaefig/base@sha256:abc");
+  assertEquals(r.ref, "ghcr.io/example/base@sha256:abc");
   assertEquals(r.needsBuild, false);
   assertEquals(r.dockerfile, undefined);
 });
@@ -81,7 +81,7 @@ Deno.test("buildRunArgs: minimal defaults", () => {
   const out = buildRunArgs({
     resolved: resolved({}),
     workspaceHostPath: "/Users/me/proj",
-    imageRef: "ghcr.io/apfelkaefig/base",
+    imageRef: "ghcr.io/example/base",
     homeDir: "/nonexistent-home",
   });
   assert(out.args[0] === "run");
@@ -93,7 +93,7 @@ Deno.test("buildRunArgs: minimal defaults", () => {
   // Default command appended at the end.
   const tail = out.args.slice(-3);
   assertEquals(tail, [
-    "ghcr.io/apfelkaefig/base",
+    "ghcr.io/example/base",
     "claude",
     "--dangerously-skip-permissions",
   ]);

@@ -6,10 +6,9 @@
 // invalidation is automatic when the Dockerfile changes and the binary is
 // recompiled.
 //
-// Future: publish to `ghcr.io/apfelkaefig/base` and pin a digest at compile
-// time so drive-by users only need Apple `container` (no Docker). Until then,
-// `AKF_BASE_IMAGE=<ref>` overrides the embedded path for development against a
-// pre-built image.
+// Registry-published base (so drive-by users need only Apple `container`, no
+// Docker) is future work — see TODO.md. Until then, `AKF_BASE_IMAGE=<ref>`
+// overrides the embedded path for development against a pre-built image.
 
 import { join } from "@std/path";
 

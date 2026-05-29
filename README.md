@@ -58,7 +58,8 @@ Pick the lightest shape that fits; promote when you outgrow it.
   "$schema": "https://apfelkaefig.com/schema/v1.json",
   "version": 1,
 
-  // Defaults to ghcr.io/apfelkaefig/base. Set a registry tag, or build locally:
+  // Defaults to the built-in base (built locally on first `akf up`, cached as
+  // apfelkaefig-base:<hash>). Set a registry tag, or build locally:
   // "image": { "dockerfile": ".devcontainer/Dockerfile" },
 
   // Use a per-project ~/.claude — handy when you juggle multiple Claude accounts.

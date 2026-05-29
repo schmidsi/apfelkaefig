@@ -40,7 +40,7 @@ Minimal — Debian slim plus what every Claude session needs:
 - `claude` (Claude Code, installed as the `node` user so self-update works)
 
 Codex, Gemini CLI, Python, and friends are deliberately BYO via a custom Dockerfile that starts
-`FROM apfelkaefig-base:<hash>` (or, post-ghcr.io, `FROM ghcr.io/apfelkaefig/base`) and adds whatever
+`FROM apfelkaefig-base:<hash>` and adds whatever
 else the project needs.
 
 ## Why arm64-only

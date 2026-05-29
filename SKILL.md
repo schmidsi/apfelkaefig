@@ -37,7 +37,7 @@ Minimum content:
 ```
 
 JSONC: comments and trailing commas allowed. Add only the keys you actually need to override —
-defaults give you the built-in `ghcr.io/apfelkaefig/base` image, `node` user, workspace at
+defaults give you the built-in base image (built locally on first `akf up`), `node` user, workspace at
 `/workspaces/<basename>`, and `claude --dangerously-skip-permissions` as the command.
 
 ### Step 2. Append `.gitignore` block
