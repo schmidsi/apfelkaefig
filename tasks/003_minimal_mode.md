@@ -17,7 +17,7 @@ Positioning: "I want to let this thing rip and I don't care if it burns down its
 2. **Claude auth via 1Password.** The image already has `op` CLI and `OP_SERVICE_ACCOUNT_TOKEN`
    forwarded from the host (landed alongside this rewrite — see `docs/secrets.md`). `--minimal`
    rides that rail: the entrypoint resolves `ANTHROPIC_API_KEY` via
-   `op read 'op://Agents/Anthropic API Key/credential'` at startup. Net result: no
+   `op read 'op://<your-vault>/Anthropic API Key/credential'` at startup. Net result: no
    `.claude/.credentials.json` mount, no raw API key in the user's shell history, and the only
    long-lived secret crossing the VM boundary is the SA token — revocable in one click.
    - Fallback: if `OP_SERVICE_ACCOUNT_TOKEN` is unset but `ANTHROPIC_API_KEY` is exported on the
@@ -93,7 +93,7 @@ fi
 
 # Resolve Claude auth. Prefer 1Password; fall back to raw env.
 if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-  ANTHROPIC_API_KEY=$(op read 'op://Agents/Anthropic API Key/credential' --no-newline) || {
+  ANTHROPIC_API_KEY=$(op read 'op://<your-vault>/Anthropic API Key/credential' --no-newline) || {
     echo "entrypoint: failed to resolve ANTHROPIC_API_KEY via op read" >&2
     exit 1
   }
@@ -107,7 +107,7 @@ fi
 exec gosu node claude --dangerously-skip-permissions "$@"
 ```
 
-The 1Password item path (`op://Agents/Anthropic API Key/credential`) is the convention from
+The 1Password item path (`op://<your-vault>/Anthropic API Key/credential`) is the convention from
 `docs/secrets.md`. Consider exposing it as an env var (`AKF_ANTHROPIC_KEY_REF`) later if users want
 to override the vault/item layout.
 

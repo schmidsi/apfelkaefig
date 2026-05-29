@@ -48,12 +48,13 @@ Rotation later: same UI → revoke → create new → update the Keychain entry 
 
 Keep a hard boundary between "human uses this" and "an agent can read this."
 
-1. 1Password web → **Vaults** → **New Vault**. Name it `Agents` (or similar).
+1. 1Password web → **Vaults** → **New Vault**. Name it whatever you like — the examples below
+   write the vault as `<your-vault>`; substitute your own name.
 2. Grant the service account **Read** on this vault only.
 3. Move or copy into it only the items the agent legitimately needs. Never the vault with your
    personal banking / identity items.
 4. Use clear item names — they become part of the `op read` reference:
-   `op://Agents/Fastmail Agent Password/password`.
+   `op://<your-vault>/Fastmail Agent Password/password`.
 
 Conventions that help:
 
@@ -233,7 +234,7 @@ other tools.
 ```toml
 # himalaya config.toml
 backend.auth.type = "password"
-backend.auth.cmd = "op read 'op://Agents/Fastmail Agent Password/password' --no-newline"
+backend.auth.cmd = "op read 'op://<your-vault>/Fastmail Agent Password/password' --no-newline"
 ```
 
 Most mail clients with a `passwordcmd` / `PassCmd` option work the same way (mutt, offlineimap,
@@ -243,16 +244,16 @@ isync).
 
 ```bash
 # ~/.zshrc or container entrypoint
-export GITHUB_TOKEN="$(op read 'op://Agents/GitHub Agent Token/token' --no-newline)"
+export GITHUB_TOKEN="$(op read 'op://<your-vault>/GitHub Agent Token/token' --no-newline)"
 # or for git pushes:
-git config --global credential.helper '!f() { echo "username=git"; echo "password=$(op read op://Agents/GitHub\\ Agent\\ Token/token --no-newline)"; }; f'
+git config --global credential.helper '!f() { echo "username=git"; echo "password=$(op read op://<your-vault>/GitHub\\ Agent\\ Token/token --no-newline)"; }; f'
 ```
 
 **SSH private key — materialize on demand, delete after:**
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
-op read 'op://Agents/GitHub SSH Key/private key' --no-newline > ~/.ssh/id_agent
+op read 'op://<your-vault>/GitHub SSH Key/private key' --no-newline > ~/.ssh/id_agent
 chmod 600 ~/.ssh/id_agent
 ssh-add ~/.ssh/id_agent
 shred -u ~/.ssh/id_agent    # key now lives only in ssh-agent memory
@@ -261,13 +262,13 @@ shred -u ~/.ssh/id_agent    # key now lives only in ssh-agent memory
 Or feed directly into `ssh-add` without ever touching disk:
 
 ```bash
-op read 'op://Agents/GitHub SSH Key/private key' | ssh-add -
+op read 'op://<your-vault>/GitHub SSH Key/private key' | ssh-add -
 ```
 
 **Generic API key as env var:**
 
 ```bash
-export ANTHROPIC_API_KEY="$(op read 'op://Agents/Anthropic API Key/credential' --no-newline)"
+export ANTHROPIC_API_KEY="$(op read 'op://<your-vault>/Anthropic API Key/credential' --no-newline)"
 ```
 
 **`op run` — inject multiple secrets into one subprocess:**
@@ -275,9 +276,9 @@ export ANTHROPIC_API_KEY="$(op read 'op://Agents/Anthropic API Key/credential' -
 ```bash
 # .env-like file with op:// references (safe to commit — no actual secrets)
 cat > .env.tpl <<'EOF'
-ANTHROPIC_API_KEY=op://Agents/Anthropic API Key/credential
-GITHUB_TOKEN=op://Agents/GitHub Agent Token/token
-DATABASE_URL=op://Agents/Prod DB/connection string
+ANTHROPIC_API_KEY=op://<your-vault>/Anthropic API Key/credential
+GITHUB_TOKEN=op://<your-vault>/GitHub Agent Token/token
+DATABASE_URL=op://<your-vault>/Prod DB/connection string
 EOF
 
 op run --env-file=.env.tpl -- my-app
@@ -303,7 +304,7 @@ from its stdout/stderr.
 - **Revocable in one click** — revoking the SA in 1Password breaks _every_ downstream consumer
   instantly.
 - **Auditable** — 1Password logs every `op read` by service account.
-- **Scoped** — SA only sees the `Agents` vault, never personal items.
+- **Scoped** — SA only sees that one vault, never personal items.
 - **Grep-safe** — a full-disk search for token prefixes (`ops_eyJ`, `ghp_`, `sk-ant-`) turns up
   nothing.
 - **Rotatable without code changes** — rotating a secret in 1Password is a single edit; consumers
