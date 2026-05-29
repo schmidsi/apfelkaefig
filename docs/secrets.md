@@ -25,8 +25,9 @@ macOS Keychain, loading it into your shell — is covered by the standalone skil
 3. Inside the VM:
 
    ```bash
-   export ANTHROPIC_API_KEY="$(op read 'op://Agents/Anthropic API Key/credential' --no-newline)"
-   export GITHUB_TOKEN="$(op read 'op://Agents/GitHub Agent Token/token' --no-newline)"
+   # Quote the op:// path — vault names may contain spaces.
+   export ANTHROPIC_API_KEY="$(op read 'op://<your-vault>/Anthropic API Key/credential' --no-newline)"
+   export GITHUB_TOKEN="$(op read 'op://<your-vault>/GitHub Agent Token/token' --no-newline)"
    ```
 
    Or inline at the point of use:
