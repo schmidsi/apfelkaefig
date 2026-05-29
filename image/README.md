@@ -39,9 +39,21 @@ Minimal — Debian slim plus what every Claude session needs:
 - `node` (Node.js, for `claude` and most npm-distributed coding agents)
 - `claude` (Claude Code, installed as the `node` user so self-update works)
 
-Codex, Gemini CLI, Python, and friends are deliberately BYO via a custom Dockerfile that starts
-`FROM apfelkaefig-base:<hash>` and adds whatever
-else the project needs.
+Codex, Gemini CLI, Python, and friends are deliberately BYO via a custom Dockerfile that extends
+this base. Declare `ARG AKF_BASE` and start `FROM ${AKF_BASE}`; `akf build` injects
+`AKF_BASE=apfelkaefig-base:<hash>` at build time (and builds the base first if Docker doesn't have
+it cached yet), so you never hardcode the content-hashed tag. Then add whatever else the project
+needs:
+
+```dockerfile
+ARG AKF_BASE
+FROM ${AKF_BASE}
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends <extra-packages> \
+ && rm -rf /var/lib/apt/lists/*
+USER node
+```
 
 ## Why arm64-only
 

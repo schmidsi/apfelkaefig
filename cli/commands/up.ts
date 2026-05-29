@@ -101,6 +101,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
         dockerfile: image.dockerfile!,
         tag: image.ref,
         run,
+        isBaseBuild: isBuiltInBuild,
       });
       if (buildCode !== 0) return buildCode;
     } else {

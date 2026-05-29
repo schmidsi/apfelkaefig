@@ -13,6 +13,7 @@ import {
 } from "../lib/container.ts";
 import { REGISTRY_HOST, startRegistry, stopRegistry } from "../lib/registry.ts";
 import { ConfigError, resolveConfig } from "../lib/config.ts";
+import { builtInImage, materializeEmbeddedDockerfile } from "../lib/baseimage.ts";
 
 export interface BuildOptions {
   cwd: string;
@@ -24,6 +25,9 @@ export interface BuildOptions {
   fromDockerfile?: string;
   noCleanup?: boolean;
   run?: Runner;
+  // Set when building the built-in base image itself. Suppresses AKF_BASE
+  // injection (the base is `FROM debian`, not an extension of itself).
+  isBaseBuild?: boolean;
 }
 
 export async function runBuild(opts: BuildOptions): Promise<number> {
@@ -79,6 +83,40 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
     return 1;
   }
 
+  // Expose the built-in base to the project build as the AKF_BASE build-arg so
+  // a custom Dockerfile can `ARG AKF_BASE` / `FROM ${AKF_BASE}` instead of
+  // hardcoding the content-hashed base tag (which changes when the base does).
+  // When the base isn't in Docker's store yet — e.g. a project that has only
+  // ever used a custom Dockerfile, so the drive-by base build never ran — build
+  // it first so the project's FROM resolves.
+  const baseBuildArgs: string[] = [];
+  if (!opts.isBaseBuild) {
+    const base = await builtInImage();
+    if (base.embedded) {
+      const baseInDocker = await run("docker", ["image", "inspect", base.ref], {
+        stdout: "null",
+        stderr: "null",
+      });
+      if (baseInDocker.code !== 0) {
+        const basePath = await materializeEmbeddedDockerfile(base);
+        console.error(`akf build: base image '${base.ref}' not in Docker — building it first…`);
+        const baseBuild = await run("docker", [
+          "build",
+          "-t",
+          base.ref,
+          "-f",
+          basePath,
+          dirname(basePath),
+        ]);
+        if (baseBuild.code !== 0) {
+          console.error("akf build: base image build failed");
+          return baseBuild.code;
+        }
+      }
+    }
+    baseBuildArgs.push("--build-arg", `AKF_BASE=${base.ref}`);
+  }
+
   console.error(`akf build: building '${tag}' from ${dockerfilePath}`);
   const dockerBuild = await run("docker", [
     "build",
@@ -86,6 +124,7 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
     tag,
     "-f",
     dockerfilePath,
+    ...baseBuildArgs,
     buildContext,
   ]);
   if (dockerBuild.code !== 0) {

@@ -1,7 +1,8 @@
 FROM debian:bookworm-slim
 
-# Minimal base for `akf up` drive-by mode. Codex, Gemini CLI, Python, etc.
-# are BYO via a custom Dockerfile that does FROM apfelkaefig-base:<hash>.
+# Minimal base for `akf up` drive-by mode. Codex, Gemini CLI, Python, etc. are
+# BYO via a custom Dockerfile that does `ARG AKF_BASE` / `FROM ${AKF_BASE}`
+# (akf build injects AKF_BASE=apfelkaefig-base:<hash>).
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl sudo ca-certificates jq \
