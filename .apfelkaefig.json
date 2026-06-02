@@ -1,4 +1,7 @@
 {
   "$schema": "https://apfelkaefig.com/schema/v1.json",
-  "version": 1
+  "version": 1,
+  // Extends the embedded base with Deno so the sandbox can run the akf
+  // toolchain itself (deno task test / fmt / compile).
+  "image": { "dockerfile": ".devcontainer/Dockerfile" }
 }
