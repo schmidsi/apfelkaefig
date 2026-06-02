@@ -22,7 +22,7 @@ fi
 name=${AKF_PROJECT_NAME:-$(basename "${cwd:-$PWD}")}
 
 if [ -n "${AKF_SANDBOX:-}" ]; then
-  printf '🔲 %s' "$name"
+  printf '%s (caged)' "$name"
 else
   printf '%s' "$name"
 fi
