@@ -16,7 +16,8 @@ read-only.
 
 `akf up` exports `AKF_SANDBOX=1` and `AKF_PROJECT_NAME=<basename>` inside the container — branch
 on these in shell prompts, statuslines, or scripts to tell sandbox runs apart from the host.
-Run `akf init --statusline` to drop a Claude Code statusline indicator into `~/.claude/bin/`.
+Run `akf statusline` once on the host to drop a Claude Code statusline indicator into
+`~/.claude/bin/`.
 
 If you'd rather not depend on the `akf` binary, run `akf eject --bash` to write standalone
 `build.sh` + `start.sh`, or `akf eject --devcontainer` to write a `.devcontainer/devcontainer.json`

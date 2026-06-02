@@ -42,12 +42,7 @@ const STATUS_LABELS: Record<WriteStatus | AppendStatus | "updated", string> = {
 };
 
 export async function runInit(
-  { cwd, mode = "default", plugins = [], statusline = false }: {
-    cwd: string;
-    mode?: InitMode;
-    plugins?: string[];
-    statusline?: boolean;
-  },
+  { cwd, mode = "default", plugins = [] }: { cwd: string; mode?: InitMode; plugins?: string[] },
 ): Promise<void> {
   const reports: Report[] = [];
 
@@ -99,23 +94,6 @@ export async function runInit(
     ),
   });
 
-  // Optional global install of the statusline helper into ~/.claude/bin/.
-  // ~/.claude is mounted RW from host into the sandbox, so a single script
-  // serves both contexts; AKF_SANDBOX (injected by `akf up`) drives the branch.
-  let statuslineInstalled = false;
-  if (statusline) {
-    const home = Deno.env.get("HOME");
-    if (!home) {
-      console.error("akf init: --statusline requires $HOME to be set");
-    } else {
-      const script = await readTemplate("akf-statusline");
-      const target = join(home, ".claude", "bin", "akf-statusline");
-      const status = await writeIfMissing(target, script, { mode: 0o755 });
-      reports.push({ label: "~/.claude/bin/akf-statusline", status });
-      statuslineInstalled = status === "created";
-    }
-  }
-
   const claudeBlock = await readTemplate("CLAUDE.block.md");
   reports.push({
     label: "CLAUDE.md",
@@ -155,12 +133,6 @@ export async function runInit(
 
   const setupSteps = pluginReports.flatMap((p) => p.setupSteps);
   const notes = pluginReports.flatMap((p) => p.postApplyMessages);
-  if (statuslineInstalled) {
-    notes.push(
-      'Statusline script installed. Add to ~/.claude/settings.json:\n' +
-        '    "statusLine": { "type": "command", "command": "~/.claude/bin/akf-statusline" }',
-    );
-  }
 
   console.log("Next steps:");
   if (mode === "bash") {

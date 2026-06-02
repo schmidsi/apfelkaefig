@@ -6,6 +6,7 @@ import { runEject } from "./commands/eject.ts";
 import { runClean } from "./commands/clean.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { runPluginCommand } from "./commands/plugin.ts";
+import { runStatusline } from "./commands/statusline.ts";
 import { parsePluginList, PluginError } from "./lib/plugins.ts";
 import denoJson from "../deno.json" with { type: "json" };
 
@@ -15,11 +16,12 @@ Usage:
   akf up [--rebuild] [-- cmd args…]
                            Launch the sandbox (built-in image if no config).
                            --rebuild forces an image rebuild/refresh.
-  akf init [--advanced|--bash] [--plugins <ids>] [--statusline]
+  akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
-                           --statusline drops ~/.claude/bin/akf-statusline (one-time, global).
   akf plugin list|explain|add
                            Manage built-in sandbox plugins.
+  akf statusline           Install the Claude Code statusline helper into
+                           ~/.claude/bin/ (one-time, global).
   akf build [--from-dockerfile <path>] [--no-cleanup]
                            Build a custom image (Docker → local registry → Apple container).
   akf eject --devcontainer | --bash [--force]
@@ -77,6 +79,8 @@ async function main(argv: string[]): Promise<number> {
       return await runDoctor({ cwd: Deno.cwd() });
     case "plugin":
       return await runPluginCommand({ cwd: Deno.cwd(), args: rest });
+    case "statusline":
+      return await runStatusline();
     default:
       console.error(`akf: unknown command '${subcommand}'`);
       console.error(USAGE);
@@ -103,13 +107,10 @@ async function dispatchUp(rest: string[]): Promise<number> {
 }
 
 async function dispatchInit(rest: string[]): Promise<number> {
-  const flags = parseArgs(rest, {
-    boolean: ["advanced", "bash", "statusline"],
-    string: ["plugins"],
-  });
+  const flags = parseArgs(rest, { boolean: ["advanced", "bash"], string: ["plugins"] });
   const mode = flags.advanced ? "advanced" : flags.bash ? "bash" : "default";
   const plugins = flags.plugins ? parsePluginList(flags.plugins) : [];
-  await runInit({ cwd: Deno.cwd(), mode, plugins, statusline: flags.statusline });
+  await runInit({ cwd: Deno.cwd(), mode, plugins });
   return 0;
 }
 
