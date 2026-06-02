@@ -121,9 +121,14 @@ export function buildRunArgs(
     }
   }
 
-  // Container env: CLAUDE_CONFIG_DIR by default + config env + extras.
+  // Container env: defaults + config env + extras. User config (c.env) wins
+  // over defaults so AKF_* and CLAUDE_CONFIG_DIR can be overridden.
+  // AKF_SANDBOX is the canonical "running inside akf" signal — scripts (like
+  // ~/.claude/bin/akf-statusline) can branch on it instead of probing hostnames.
   const envOut: Record<string, string> = {
     CLAUDE_CONFIG_DIR: `/home/${e.user}/.claude`,
+    AKF_SANDBOX: "1",
+    AKF_PROJECT_NAME: basename(input.workspaceHostPath),
     ...(c.env ?? {}),
     ...(input.extraEnv ?? {}),
   };

@@ -113,6 +113,31 @@ Deno.test("buildRunArgs: custom command + extra env", () => {
   assert(envIdx > 0, "token not forwarded");
 });
 
+Deno.test("buildRunArgs: injects AKF_SANDBOX and AKF_PROJECT_NAME", () => {
+  const out = buildRunArgs({
+    resolved: resolved({}),
+    workspaceHostPath: "/Users/me/myproj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+  });
+  assert(out.args.includes("AKF_SANDBOX=1"), "AKF_SANDBOX not injected");
+  assert(out.args.includes("AKF_PROJECT_NAME=myproj"), "AKF_PROJECT_NAME not injected");
+});
+
+Deno.test("buildRunArgs: config.env overrides AKF_* defaults", () => {
+  const out = buildRunArgs({
+    resolved: resolved({ env: { AKF_PROJECT_NAME: "custom" } }),
+    workspaceHostPath: "/Users/me/myproj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+  });
+  assert(out.args.includes("AKF_PROJECT_NAME=custom"), "user override didn't take effect");
+  assert(
+    !out.args.includes("AKF_PROJECT_NAME=myproj"),
+    "default value still present alongside override",
+  );
+});
+
 Deno.test("buildRunArgs: renders configured port forwards", () => {
   const out = buildRunArgs({
     resolved: resolved({

@@ -15,8 +15,9 @@ Usage:
   akf up [--rebuild] [-- cmd args…]
                            Launch the sandbox (built-in image if no config).
                            --rebuild forces an image rebuild/refresh.
-  akf init [--advanced|--bash] [--plugins <ids>]
+  akf init [--advanced|--bash] [--plugins <ids>] [--statusline]
                            Set up the current folder for akf.
+                           --statusline drops ~/.claude/bin/akf-statusline (one-time, global).
   akf plugin list|explain|add
                            Manage built-in sandbox plugins.
   akf build [--from-dockerfile <path>] [--no-cleanup]
@@ -102,10 +103,13 @@ async function dispatchUp(rest: string[]): Promise<number> {
 }
 
 async function dispatchInit(rest: string[]): Promise<number> {
-  const flags = parseArgs(rest, { boolean: ["advanced", "bash"], string: ["plugins"] });
+  const flags = parseArgs(rest, {
+    boolean: ["advanced", "bash", "statusline"],
+    string: ["plugins"],
+  });
   const mode = flags.advanced ? "advanced" : flags.bash ? "bash" : "default";
   const plugins = flags.plugins ? parsePluginList(flags.plugins) : [];
-  await runInit({ cwd: Deno.cwd(), mode, plugins });
+  await runInit({ cwd: Deno.cwd(), mode, plugins, statusline: flags.statusline });
   return 0;
 }
 

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Apfelkäfig statusline indicator for Claude Code.
+#
+# Inside an akf sandbox, `akf up` exports AKF_SANDBOX=1 and AKF_PROJECT_NAME=<basename>.
+# This script branches on AKF_SANDBOX so the same ~/.claude/settings.json works on
+# host and inside the sandbox.
+#
+# Wire it up in ~/.claude/settings.json:
+#   { "statusLine": { "type": "command", "command": "~/.claude/bin/akf-statusline" } }
+
+set -eu
+
+input=$(cat || true)
+if command -v jq >/dev/null 2>&1 && [ -n "$input" ]; then
+  cwd=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty')
+  model=$(printf '%s' "$input" | jq -r '.model.display_name // empty')
+else
+  cwd=$PWD
+  model=
+fi
+
+name=${AKF_PROJECT_NAME:-$(basename "${cwd:-$PWD}")}
+
+if [ -n "${AKF_SANDBOX:-}" ]; then
+  printf '🔲 %s' "$name"
+else
+  printf '%s' "$name"
+fi
+
+if [ -n "$model" ]; then
+  printf '  ·  %s' "$model"
+fi
