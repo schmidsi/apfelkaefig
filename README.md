@@ -118,7 +118,7 @@ Found a security issue? Open a GitHub issue or email the address in `git log`.
 ```bash
 deno task test       # unit tests for config, container, secrets, fs
 deno task dev up     # run from source
-deno task compile    # build ./dist/akf
+deno task compile    # build ./dist/akf (always macOS arm64, even from inside the container)
 deno task fmt        # format
 deno task lint       # lint
 ```
