@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   buildRunArgs,
+  claudeProfileLabel,
   dockerStatus,
   ensureVolumes,
   projectImageTag,
@@ -208,15 +209,15 @@ Deno.test("buildRunArgs: drive-by mode skips ~/Downloads and ~/Desktop", async (
 Deno.test("buildRunArgs: claudeConfigDir overrides host source of ~/.claude mount", async () => {
   const home = await Deno.makeTempDir();
   try {
-    await Deno.mkdir(`${home}/.claude-ens`);
+    await Deno.mkdir(`${home}/.claude-work`);
 
     const cfg: ResolvedConfig = {
-      ...resolved({ claudeConfigDir: "~/.claude-ens" }),
+      ...resolved({ claudeConfigDir: "~/.claude-work" }),
       source: {
         kind: "apfelkaefig",
         path: "/p/.apfelkaefig.json",
         dir: "/p",
-        raw: { version: 1, claudeConfigDir: "~/.claude-ens" },
+        raw: { version: 1, claudeConfigDir: "~/.claude-work" },
       },
     };
     const out = buildRunArgs({
@@ -226,7 +227,7 @@ Deno.test("buildRunArgs: claudeConfigDir overrides host source of ~/.claude moun
       homeDir: home,
     });
     const claudeMount = out.args.find((a) => a.endsWith(":/home/node/.claude"));
-    assertEquals(claudeMount, `${home}/.claude-ens:/home/node/.claude`);
+    assertEquals(claudeMount, `${home}/.claude-work:/home/node/.claude`);
     // Default ~/.claude was not also mounted.
     assert(
       !out.args.some((a) => a === `${home}/.claude:/home/node/.claude`),
@@ -235,6 +236,46 @@ Deno.test("buildRunArgs: claudeConfigDir overrides host source of ~/.claude moun
   } finally {
     await Deno.remove(home, { recursive: true });
   }
+});
+
+Deno.test("buildRunArgs: claudeConfigDir exports AKF_CLAUDE_PROFILE label", async () => {
+  const home = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${home}/.claude-work`);
+    const cfg: ResolvedConfig = {
+      ...resolved({ claudeConfigDir: "~/.claude-work" }),
+      source: {
+        kind: "apfelkaefig",
+        path: "/p/.apfelkaefig.json",
+        dir: "/p",
+        raw: { version: 1, claudeConfigDir: "~/.claude-work" },
+      },
+    };
+    const out = buildRunArgs({
+      resolved: cfg,
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    assert(out.args.includes("AKF_CLAUDE_PROFILE=WORK"));
+
+    // No profile env when claudeConfigDir is unset.
+    const plain = buildRunArgs({
+      resolved: resolved({}),
+      workspaceHostPath: "/Users/me/proj",
+      imageRef: "img",
+      homeDir: home,
+    });
+    assert(!plain.args.some((a) => a.startsWith("AKF_CLAUDE_PROFILE=")));
+  } finally {
+    await Deno.remove(home, { recursive: true });
+  }
+});
+
+Deno.test("claudeProfileLabel derives labels from config dir names", () => {
+  assertEquals(claudeProfileLabel("/Users/me/.claude-work"), "WORK");
+  assertEquals(claudeProfileLabel("/Users/me/.myprofile"), "MYPROFILE");
+  assertEquals(claudeProfileLabel("/Users/me/profiles/alt"), "ALT");
 });
 
 Deno.test("buildRunArgs: omits ~/.claude mount when claudeConfigDir source is missing", async () => {

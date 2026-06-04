@@ -125,10 +125,14 @@ export function buildRunArgs(
   // over defaults so AKF_* and CLAUDE_CONFIG_DIR can be overridden.
   // AKF_SANDBOX is the canonical "running inside akf" signal — scripts (like
   // ~/.claude/bin/akf-statusline) can branch on it instead of probing hostnames.
+  // AKF_CLAUDE_PROFILE labels a non-default claudeConfigDir (`~/.claude-work`
+  // → "WORK") so the statusline can show which Claude profile is active.
+  const profile = e.claudeConfigDir ? claudeProfileLabel(sub(e.claudeConfigDir)) : "";
   const envOut: Record<string, string> = {
     CLAUDE_CONFIG_DIR: `/home/${e.user}/.claude`,
     AKF_SANDBOX: "1",
     AKF_PROJECT_NAME: basename(input.workspaceHostPath),
+    ...(profile ? { AKF_CLAUDE_PROFILE: profile } : {}),
     ...(c.env ?? {}),
     ...(input.extraEnv ?? {}),
   };
@@ -147,6 +151,17 @@ export function buildRunArgs(
     workspaceFolder: sub(e.workspaceFolder),
     user: e.user,
   };
+}
+
+// Derive a short uppercase profile label from a custom claudeConfigDir:
+// `~/.claude-work` → "WORK". Falls back to the dot-stripped basename for
+// dirs that don't follow the `.claude-*` pattern.
+export function claudeProfileLabel(dir: string): string {
+  const name = basename(dir);
+  const stripped = name.startsWith(".claude-")
+    ? name.slice(".claude-".length)
+    : name.replace(/^\./, "");
+  return stripped.toUpperCase();
 }
 
 // Expand a leading `~` or `~/` to the host home dir. Mid-path tildes are

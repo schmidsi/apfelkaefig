@@ -3,7 +3,9 @@
 #
 # Inside an akf sandbox, `akf up` exports AKF_SANDBOX=1 and AKF_PROJECT_NAME=<basename>.
 # This script branches on AKF_SANDBOX so the same ~/.claude/settings.json works on
-# host and inside the sandbox.
+# host and inside the sandbox. When the project uses a custom claudeConfigDir,
+# `akf up` also exports AKF_CLAUDE_PROFILE which renders as a trailing tag:
+# `myproject (sandboxed) [WORK]`.
 #
 # Wire it up in ~/.claude/settings.json:
 #   { "statusLine": { "type": "command", "command": "~/.claude/bin/akf-statusline" } }
@@ -25,6 +27,10 @@ if [ -n "${AKF_SANDBOX:-}" ]; then
   printf '%s (sandboxed)' "$name"
 else
   printf '%s' "$name"
+fi
+
+if [ -n "${AKF_CLAUDE_PROFILE:-}" ]; then
+  printf ' [%s]' "$AKF_CLAUDE_PROFILE"
 fi
 
 if [ -n "$model" ]; then

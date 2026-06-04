@@ -599,10 +599,10 @@ Deno.test("effective exposes claudeConfigDir when set, undefined otherwise", () 
   const set = effective({
     source: { kind: "defaults", dir: "/p" },
     workspaceDir: "/p",
-    config: { version: 1, claudeConfigDir: "~/.claude-ens" },
+    config: { version: 1, claudeConfigDir: "~/.claude-work" },
     warnings: [],
   });
-  assertEquals(set.claudeConfigDir, "~/.claude-ens");
+  assertEquals(set.claudeConfigDir, "~/.claude-work");
 });
 
 Deno.test("effective splits string command on whitespace", () => {
