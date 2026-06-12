@@ -88,21 +88,54 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-async function dispatchUp(rest: string[]): Promise<number> {
+export type UpArgs =
+  | { kind: "help" }
+  | { kind: "error"; message: string }
+  | { kind: "run"; positional: string[]; imageOverride?: string; rebuild: boolean };
+
+export function parseUpArgs(rest: string[]): UpArgs {
+  let unknownFlag: string | undefined;
   const flags = parseArgs(rest, {
     string: ["image"],
-    boolean: ["rebuild"],
+    boolean: ["rebuild", "help"],
+    alias: { h: "help" },
     "--": true,
+    unknown: (arg, key) => {
+      if (key !== undefined && unknownFlag === undefined) unknownFlag = arg;
+      return key === undefined; // keep positionals, drop unknown flags
+    },
   });
-  const positional = [
-    ...flags._.map(String),
-    ...(flags["--"] ?? []).map(String),
-  ];
-  return await runUp({
-    cwd: Deno.cwd(),
-    positional,
+  if (flags.help) return { kind: "help" };
+  if (unknownFlag !== undefined) {
+    return {
+      kind: "error",
+      message: `akf up: unknown flag '${unknownFlag}'` +
+        ` (use \`akf up -- <cmd> ${unknownFlag}\` to pass flags to the sandbox command)`,
+    };
+  }
+  return {
+    kind: "run",
+    positional: [...flags._.map(String), ...(flags["--"] ?? []).map(String)],
     imageOverride: flags.image,
     rebuild: flags.rebuild,
+  };
+}
+
+async function dispatchUp(rest: string[]): Promise<number> {
+  const parsed = parseUpArgs(rest);
+  if (parsed.kind === "help") {
+    console.log(USAGE);
+    return 0;
+  }
+  if (parsed.kind === "error") {
+    console.error(parsed.message);
+    return 2;
+  }
+  return await runUp({
+    cwd: Deno.cwd(),
+    positional: parsed.positional,
+    imageOverride: parsed.imageOverride,
+    rebuild: parsed.rebuild,
   });
 }
 
