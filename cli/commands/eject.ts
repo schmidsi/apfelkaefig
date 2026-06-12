@@ -61,7 +61,9 @@ async function ejectDevcontainer(
     workspaceMount:
       `source=\${localWorkspaceFolder},target=${e.workspaceFolder},type=bind,consistency=delegated`,
     workspaceFolder: e.workspaceFolder,
-    mounts: defaultMountStrings(e.user).concat((c.mounts ?? []).map(mountObjToString)),
+    mounts: defaultMountStrings(e.user, e.claudeConfigDir).concat(
+      (c.mounts ?? []).map(mountObjToString),
+    ),
   };
   if (c.ports && c.ports.length > 0) {
     dc.forwardPorts = c.ports.map((p) => p.container);
@@ -147,6 +149,7 @@ async function ejectBash(
 
   const startSh = renderStart({
     user: e.user,
+    claudeConfigDir: e.claudeConfigDir,
     workspaceFolder: e.workspaceFolder,
     cpus: e.resources.cpus,
     memory: e.resources.memory,
@@ -175,6 +178,7 @@ async function ejectBash(
 
 interface StartTemplateInput {
   user: string;
+  claudeConfigDir?: string;
   workspaceFolder: string;
   cpus: number;
   memory: string;
@@ -226,7 +230,7 @@ function renderStart(t: StartTemplateInput): string {
     "$WS_BASE",
   );
   lines.push(`mount_flags+=(-v "$WORKSPACE:${wsFolder}")`);
-  for (const m of defaultBindMountsFor(t.user)) {
+  for (const m of defaultBindMountsFor(t.user, t.claudeConfigDir)) {
     lines.push(`if [[ -e "${m.host}" ]]; then`);
     lines.push(
       `  mount_flags+=(-v "${m.host}:${m.target}${m.readonly ? ":ro" : ""}")`,
@@ -320,9 +324,12 @@ function renderBuild({ tag, dockerfile }: { tag: string; dockerfile: string }): 
   ].join("\n");
 }
 
-function defaultMountStrings(user: string): string[] {
+function defaultMountStrings(user: string, claudeConfigDir?: string): string[] {
+  const claudeSource = claudeConfigDir
+    ? claudeConfigDir.replace(/^~(?=\/|$)/, "${localEnv:HOME}")
+    : "${localEnv:HOME}/.claude";
   return [
-    `source=\${localEnv:HOME}/.claude,target=/home/${user}/.claude,type=bind`,
+    `source=${claudeSource},target=/home/${user}/.claude,type=bind`,
     `source=\${localEnv:HOME}/Downloads,target=/home/${user}/Downloads,type=bind,readonly`,
     `source=\${localEnv:HOME}/Desktop,target=/home/${user}/Desktop,type=bind,readonly`,
   ];
@@ -330,9 +337,15 @@ function defaultMountStrings(user: string): string[] {
 
 function defaultBindMountsFor(
   user: string,
+  claudeConfigDir?: string,
 ): { host: string; target: string; readonly: boolean }[] {
+  const claudeHost = claudeConfigDir
+    ? claudeConfigDir
+      .replace(/^~(?=\/|$)/, "$HOME")
+      .replace(/\$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\}/g, "${$1}")
+    : "$HOME/.claude";
   return [
-    { host: "$HOME/.claude", target: `/home/${user}/.claude`, readonly: false },
+    { host: claudeHost, target: `/home/${user}/.claude`, readonly: false },
     { host: "$HOME/Downloads", target: `/home/${user}/Downloads`, readonly: true },
     { host: "$HOME/Desktop", target: `/home/${user}/Desktop`, readonly: true },
   ];

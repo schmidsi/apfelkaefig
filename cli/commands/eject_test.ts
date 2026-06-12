@@ -131,3 +131,41 @@ Deno.test("eject: malformed config exits 1 instead of throwing", async () => {
     assertEquals(code, 1);
   });
 });
+
+Deno.test("eject --devcontainer: claudeConfigDir overrides ~/.claude mount source", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({ version: 1, image: "node:22", claudeConfigDir: "~/.claude-work" }),
+    );
+    const code = await runEject({ cwd: dir, target: "devcontainer" });
+    assertEquals(code, 0);
+    const dc = JSON.parse(
+      await Deno.readTextFile(join(dir, ".devcontainer", "devcontainer.json")),
+    );
+    const claudeMount = (dc.mounts as string[]).find((m: string) =>
+      m.includes("target=/home/node/.claude,")
+    );
+    assertEquals(
+      claudeMount,
+      "source=${localEnv:HOME}/.claude-work,target=/home/node/.claude,type=bind",
+    );
+  });
+});
+
+Deno.test("eject --bash: claudeConfigDir overrides ~/.claude bind mount", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({ version: 1, image: "node:22", claudeConfigDir: "~/.claude-work" }),
+    );
+    const code = await runEject({ cwd: dir, target: "bash" });
+    assertEquals(code, 0);
+    const start = await Deno.readTextFile(join(dir, "start.sh"));
+    assert(
+      start.includes(`mount_flags+=(-v "$HOME/.claude-work:/home/node/.claude")`),
+      "claudeConfigDir bind mount missing",
+    );
+    assert(!start.includes(`"$HOME/.claude:`), "default ~/.claude mount should be replaced");
+  });
+});
