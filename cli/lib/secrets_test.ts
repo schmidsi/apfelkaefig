@@ -73,23 +73,21 @@ Deno.test("findOpToken: skips keychain on non-darwin", async () => {
 });
 
 Deno.test("resolveOp: AKF_DISABLE_OP=1 short-circuits", async () => {
-  const r = await resolveOp({
+  const token = await resolveOp({
     env: { AKF_DISABLE_OP: "1", OP_SERVICE_ACCOUNT_TOKEN: "abc" },
     platform: "darwin",
     explicit: true,
   });
-  assertEquals(r.status, "explicit-disabled");
-  assertEquals(r.token, null);
+  assertEquals(token, null);
 });
 
 Deno.test("resolveOp: explicit:false disables even when token present", async () => {
-  const r = await resolveOp({
+  const token = await resolveOp({
     env: { OP_SERVICE_ACCOUNT_TOKEN: "abc" },
     platform: "darwin",
     explicit: false,
   });
-  assertEquals(r.status, "explicit-off");
-  assertEquals(r.token, null);
+  assertEquals(token, null);
 });
 
 Deno.test("resolveOp: explicit:true errors when no token", async () => {
@@ -100,16 +98,14 @@ Deno.test("resolveOp: explicit:true errors when no token", async () => {
 });
 
 Deno.test("resolveOp: implicit-on injects when token present", async () => {
-  const r = await resolveOp({
+  const token = await resolveOp({
     env: { OP_SERVICE_ACCOUNT_TOKEN: "abc" },
     platform: "darwin",
   });
-  assertEquals(r.status, "injected");
-  assertEquals(r.token, "abc");
+  assertEquals(token, "abc");
 });
 
 Deno.test("resolveOp: implicit-off when no token, no error", async () => {
-  const r = await resolveOp({ env: {}, platform: "darwin", run: fail() });
-  assertEquals(r.status, "implicit-off-no-token");
-  assertEquals(r.token, null);
+  const token = await resolveOp({ env: {}, platform: "darwin", run: fail() });
+  assertEquals(token, null);
 });

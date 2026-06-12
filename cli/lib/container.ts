@@ -3,7 +3,7 @@
 // the subprocess; built-in `realRunner` shells out for real.
 
 import { basename } from "@std/path";
-import { type ApfelkaefigConfig, DEFAULTS, type MountConfig } from "./schema.ts";
+import { type ApfelkaefigConfig, type MountConfig } from "./schema.ts";
 import { effective, type ResolvedConfig, substitute } from "./config.ts";
 
 export type CmdResult = { code: number; stdout: string; stderr: string };
@@ -233,9 +233,6 @@ export function resolveImageRef(
     dockerfile: config.image.dockerfile,
   };
 }
-
-// Replace ApfelkaefigConfig defaults reference for export
-export { DEFAULTS };
 
 // --- container subcommand wrappers ---
 

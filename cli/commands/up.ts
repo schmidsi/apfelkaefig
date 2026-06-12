@@ -134,8 +134,8 @@ export async function runUp(opts: UpOptions): Promise<number> {
   // 1Password injection.
   let extraEnv: Record<string, string> | undefined;
   try {
-    const op = await resolveOp({ explicit: resolved.config.secrets?.onepassword });
-    if (op.token) extraEnv = { OP_SERVICE_ACCOUNT_TOKEN: op.token };
+    const token = await resolveOp({ explicit: resolved.config.secrets?.onepassword });
+    if (token) extraEnv = { OP_SERVICE_ACCOUNT_TOKEN: token };
   } catch (err) {
     if (err instanceof SecretsRequiredError || err instanceof TruncatedTokenError) {
       console.error(`akf up: ${err.message}`);

@@ -95,17 +95,6 @@ export interface ResolveOpts extends FindTokenOpts {
   explicit?: boolean;
 }
 
-export interface ResolveResult {
-  token: string | null;
-  // Pretty-printable status for `akf doctor`.
-  status:
-    | "injected"
-    | "explicit-disabled"
-    | "implicit-off-no-token"
-    | "explicit-off"
-    | "explicit-on-missing";
-}
-
 export class SecretsRequiredError extends Error {
   constructor() {
     super(
@@ -119,18 +108,11 @@ export class SecretsRequiredError extends Error {
 // Resolve the 1Password token according to the implicit-on / explicit-required
 // rules. Errors loudly when explicit-on but missing — plan calls this out
 // because security is the top concern.
-export async function resolveOp(opts: ResolveOpts = {}): Promise<ResolveResult> {
+export async function resolveOp(opts: ResolveOpts = {}): Promise<string | null> {
   const env = opts.env ?? Deno.env.toObject();
-  if (env.AKF_DISABLE_OP === "1") {
-    return { token: null, status: "explicit-disabled" };
-  }
-  if (opts.explicit === false) {
-    return { token: null, status: "explicit-off" };
-  }
+  if (env.AKF_DISABLE_OP === "1") return null;
+  if (opts.explicit === false) return null;
   const token = await findOpToken(opts);
-  if (opts.explicit === true) {
-    if (!token) throw new SecretsRequiredError();
-    return { token, status: "injected" };
-  }
-  return token ? { token, status: "injected" } : { token: null, status: "implicit-off-no-token" };
+  if (opts.explicit === true && !token) throw new SecretsRequiredError();
+  return token;
 }

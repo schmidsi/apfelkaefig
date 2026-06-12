@@ -9,13 +9,13 @@ import {
   listContainers,
   projectImageTag,
   realRunner,
+  resolveImageRef,
   rmContainer,
   rmImage,
   type Runner,
   stopContainer,
 } from "../lib/container.ts";
 import { ConfigError, resolveConfig } from "../lib/config.ts";
-import { resolveImageRef } from "../lib/container.ts";
 import { builtInImage } from "../lib/baseimage.ts";
 
 export interface CleanOptions {
