@@ -5,6 +5,7 @@
 import { basename } from "@std/path";
 import { type ApfelkaefigConfig, type MountConfig } from "./schema.ts";
 import { effective, type ResolvedConfig, substitute } from "./config.ts";
+import { pathExistsSync, projectSlug } from "./fs.ts";
 
 export type CmdResult = { code: number; stdout: string; stderr: string };
 
@@ -183,16 +184,6 @@ function pushMountIfExists(
   push(src, tgt, readonly);
 }
 
-function pathExistsSync(p: string): boolean {
-  try {
-    Deno.lstatSync(p);
-    return true;
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return false;
-    return false;
-  }
-}
-
 function stdinIsTerminal(): boolean {
   try {
     return Deno.stdin.isTerminal();
@@ -202,12 +193,9 @@ function stdinIsTerminal(): boolean {
 }
 
 // Per-project image tag derived from the workspace basename — preserves the
-// fix from a96b899. Lowercased + non-alnum stripped to keep it a valid tag.
-// Docker tags must start with [a-z0-9], so strip leading separators too.
+// fix from a96b899.
 export function projectImageTag(workspaceHostPath: string): string {
-  const base = basename(workspaceHostPath).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-  const trimmed = base.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
-  return `${trimmed || "akf"}-sandbox`;
+  return `${projectSlug(workspaceHostPath)}-sandbox`;
 }
 
 // Resolve which image to run given the config + the built-in default. The

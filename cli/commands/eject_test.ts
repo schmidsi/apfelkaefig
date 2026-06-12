@@ -1,15 +1,7 @@
+import { withTmpDir } from "../lib/test_util.ts";
 import { assert, assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { runEject } from "./eject.ts";
-
-async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "akf-eject-test-" });
-  try {
-    await fn(dir);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-}
 
 Deno.test("eject --bash: emits volume create + -v flag without [[ -e ]] guard", async () => {
   await withTmpDir(async (dir) => {

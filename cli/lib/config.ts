@@ -10,6 +10,7 @@ import {
   VOLUME_NAME_RE,
 } from "./schema.ts";
 import { listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
+import { pathExists } from "./fs.ts";
 
 export type ConfigSource =
   | { kind: "apfelkaefig"; path: string; dir: string; raw: ApfelkaefigConfig }
@@ -57,16 +58,6 @@ export async function findConfig(
     const parent = dirname(dir);
     if (parent === dir) return { dir: resolve(cwd) };
     dir = parent;
-  }
-}
-
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await Deno.lstat(p);
-    return true;
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return false;
-    throw err;
   }
 }
 

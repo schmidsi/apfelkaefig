@@ -1,17 +1,9 @@
+import { withTmpDir } from "../lib/test_util.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { addPluginToWorkspace } from "./plugin.ts";
 import { runInit } from "./init.ts";
 import { PluginError } from "../lib/plugins.ts";
-
-async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "akf-plugin-test-" });
-  try {
-    await fn(dir);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-}
 
 Deno.test("plugin add 1password creates config and marker block", async () => {
   await withTmpDir(async (dir) => {

@@ -1,15 +1,7 @@
+import { withTmpDir } from "./test_util.ts";
 import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { appendBlockIfAbsent, upsertBlock, writeIfMissing } from "./fs.ts";
-
-async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "akf-test-" });
-  try {
-    await fn(dir);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-}
 
 Deno.test("writeIfMissing creates a file when absent", async () => {
   await withTmpDir(async (dir) => {

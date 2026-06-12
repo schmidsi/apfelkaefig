@@ -1,15 +1,7 @@
+import { withTmpDir } from "../lib/test_util.ts";
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { runClean } from "./clean.ts";
-
-async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "akf-clean-test-" });
-  try {
-    await fn(dir);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-}
 
 Deno.test("clean: malformed config exits 1 instead of throwing", async () => {
   await withTmpDir(async (dir) => {

@@ -1,15 +1,7 @@
+import { withTmpDir } from "../lib/test_util.ts";
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { installStatusline } from "./statusline.ts";
-
-async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "akf-statusline-test-" });
-  try {
-    await fn(dir);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-}
 
 Deno.test("installStatusline: creates, then reports up to date, then updates stale script", async () => {
   await withTmpDir(async (home) => {

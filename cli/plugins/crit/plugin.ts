@@ -1,4 +1,5 @@
 import { join } from "@std/path";
+import { pathExists, readTextIfPresent } from "../../lib/fs.ts";
 import type { BuiltInPlugin, PluginDoctorCheck, PluginDoctorContext } from "../types.ts";
 
 const CRIT_GUIDANCE = `## Crit inside the sandbox
@@ -162,23 +163,4 @@ async function critDoctorChecks(resolved: PluginDoctorContext): Promise<PluginDo
       : "run `akf up -- crit install claude-code` from the project root",
   });
   return checks;
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await Deno.lstat(path);
-    return true;
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return false;
-    throw err;
-  }
-}
-
-async function readTextIfPresent(path: string): Promise<string | null> {
-  try {
-    return await Deno.readTextFile(path);
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return null;
-    throw err;
-  }
 }

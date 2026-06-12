@@ -1,7 +1,7 @@
 import { join } from "@std/path";
 import { ensureDir } from "@std/fs";
 import { findConfig, parseConfig } from "../lib/config.ts";
-import { upsertBlock, type UpsertStatus } from "../lib/fs.ts";
+import { STATUS_LABELS, upsertBlock, type UpsertStatus } from "../lib/fs.ts";
 import {
   getPlugin,
   listPlugins,
@@ -25,13 +25,6 @@ export interface PluginAddResult {
   setupSteps: SetupStep[];
   postApplyMessages: string[];
 }
-
-const STATUS_LABELS: Record<UpsertStatus, string> = {
-  "created": "created",
-  "appended": "appended",
-  "updated": "updated",
-  "skipped-present": "skipped (already present)",
-};
 
 export async function runPluginCommand(
   { cwd, args }: { cwd: string; args: string[] },

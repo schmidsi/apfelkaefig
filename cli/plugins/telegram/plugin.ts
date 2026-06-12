@@ -15,7 +15,7 @@
 // `sudo -u telegram`, so claude-running-as-node can invoke telegram but
 // cannot read the session DB directly. Incompatible with storage=host.
 
-import { basename } from "@std/path";
+import { projectSlug, readTextIfPresent } from "../../lib/fs.ts";
 import type {
   BuiltInPlugin,
   PluginContext,
@@ -211,7 +211,7 @@ function volumeNames(
   config: TelegramConfig,
   ctx: PluginContext,
 ): { configVol: string; stateVol: string } {
-  const stem = projectStem(ctx.workspaceDir);
+  const stem = projectSlug(ctx.workspaceDir);
   if (config.storage === "named") {
     return {
       configVol: config.configVolume ?? `tg-${stem}-config`,
@@ -225,12 +225,6 @@ function volumeNames(
     configVol: `tg-${stem}-${hash}-config`,
     stateVol: `tg-${stem}-${hash}-state`,
   };
-}
-
-function projectStem(workspaceDir: string): string {
-  const base = basename(workspaceDir).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-  const trimmed = base.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
-  return trimmed || "akf";
 }
 
 // Non-crypto stable hash. 8 hex chars is enough to disambiguate a handful
@@ -486,14 +480,5 @@ async function upstreamCheck(config: TelegramConfig): Promise<PluginDoctorCheck>
       severity: "warn",
       detail: `upstream check failed: ${e.message}`,
     };
-  }
-}
-
-async function readTextIfPresent(path: string): Promise<string | null> {
-  try {
-    return await Deno.readTextFile(path);
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return null;
-    throw err;
   }
 }

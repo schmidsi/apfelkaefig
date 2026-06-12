@@ -1,3 +1,4 @@
+import { withTmpDir } from "./test_util.ts";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { join } from "@std/path";
 import {
@@ -9,15 +10,6 @@ import {
   substitute,
   validate,
 } from "./config.ts";
-
-async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: "akf-config-test-" });
-  try {
-    await fn(dir);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-}
 
 Deno.test("validate accepts a minimal v1 config", () => {
   const c = validate({ version: 1 });

@@ -14,6 +14,7 @@ import { join } from "@std/path";
 import {
   appendBlockIfAbsent,
   type AppendStatus,
+  STATUS_LABELS,
   writeIfMissing,
   type WriteStatus,
 } from "../lib/fs.ts";
@@ -32,14 +33,6 @@ interface Report {
   label: string;
   status: WriteStatus | AppendStatus;
 }
-
-const STATUS_LABELS: Record<WriteStatus | AppendStatus | "updated", string> = {
-  "created": "created",
-  "skipped-exists": "skipped (exists)",
-  "appended": "appended",
-  "skipped-present": "skipped (already present)",
-  "updated": "updated",
-};
 
 export async function runInit(
   { cwd, mode = "default", plugins = [] }: { cwd: string; mode?: InitMode; plugins?: string[] },

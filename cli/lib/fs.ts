@@ -1,9 +1,56 @@
-import { dirname } from "@std/path";
+import { basename, dirname } from "@std/path";
 import { ensureDir } from "@std/fs";
 
 export type WriteStatus = "created" | "skipped-exists";
 export type AppendStatus = "created" | "appended" | "skipped-present";
 export type UpsertStatus = "created" | "appended" | "updated" | "skipped-present";
+
+export const STATUS_LABELS: Record<WriteStatus | AppendStatus | UpsertStatus, string> = {
+  "created": "created",
+  "skipped-exists": "skipped (exists)",
+  "appended": "appended",
+  "skipped-present": "skipped (already present)",
+  "updated": "updated",
+};
+
+export async function pathExists(p: string): Promise<boolean> {
+  try {
+    await Deno.lstat(p);
+    return true;
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return false;
+    throw err;
+  }
+}
+
+// Treat any stat failure as "missing" — callers use this to skip optional
+// mounts, where erring toward skipping beats crashing.
+export function pathExistsSync(p: string): boolean {
+  try {
+    Deno.lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Workspace basename → slug usable in Docker tags and volume names.
+// Lowercased + non-alnum stripped; Docker tags must start with [a-z0-9],
+// so strip leading separators too.
+export function projectSlug(workspaceHostPath: string): string {
+  const base = basename(workspaceHostPath).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  const trimmed = base.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
+  return trimmed || "akf";
+}
+
+export async function readTextIfPresent(path: string): Promise<string | null> {
+  try {
+    return await Deno.readTextFile(path);
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return null;
+    throw err;
+  }
+}
 
 export async function writeIfMissing(
   path: string,
