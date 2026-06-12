@@ -36,6 +36,32 @@ export const critPlugin: BuiltInPlugin = {
   id: "crit",
   aliases: [],
   description: "Install Crit and publish its local review UI on 127.0.0.1:3247.",
+  validateConfig(config) {
+    const allowed = ["enabled", "agentIntegration", "installMethod", "version", "port"];
+    for (const k of Object.keys(config)) {
+      if (!allowed.includes(k)) {
+        throw new Error(`'plugins.crit' has unknown key '${k}'`);
+      }
+    }
+    if (config.enabled !== true && config.enabled !== false) {
+      throw new Error("'plugins.crit.enabled' must be a boolean");
+    }
+    if (config.agentIntegration !== "claude-code") {
+      throw new Error("'plugins.crit.agentIntegration' must be 'claude-code'");
+    }
+    if (config.installMethod !== "pinned-release") {
+      throw new Error("'plugins.crit.installMethod' must be 'pinned-release'");
+    }
+    if (typeof config.version !== "string" || !/^v\d+\.\d+\.\d+$/.test(config.version)) {
+      throw new Error("'plugins.crit.version' must look like 'v0.13.0'");
+    }
+    if (
+      typeof config.port !== "number" || !Number.isInteger(config.port) ||
+      config.port < 1 || config.port > 65535
+    ) {
+      throw new Error("'plugins.crit.port' must be an integer from 1 to 65535");
+    }
+  },
   defaultConfig: {
     enabled: true,
     agentIntegration: "claude-code",

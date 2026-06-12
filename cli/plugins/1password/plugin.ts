@@ -10,6 +10,16 @@ export const onePasswordPlugin: BuiltInPlugin = {
   id: "1password",
   aliases: ["1pw", "op"],
   description: "Forward OP_SERVICE_ACCOUNT_TOKEN and document op read usage inside the sandbox.",
+  validateConfig(config) {
+    for (const k of Object.keys(config)) {
+      if (k !== "enabled") {
+        throw new Error(`'plugins.1password' has unknown key '${k}'`);
+      }
+    }
+    if (config.enabled !== true && config.enabled !== false) {
+      throw new Error("'plugins.1password.enabled' must be a boolean");
+    }
+  },
   defaultConfig: { enabled: true },
   applyConfig(base, config, _ctx) {
     if (!config.enabled) return base;

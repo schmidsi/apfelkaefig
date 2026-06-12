@@ -4,6 +4,11 @@
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_URL = "https://apfelkaefig.com/schema/v1.json";
 
+// Volume names follow Apple `container`'s convention — alphanumeric start,
+// then alphanumerics plus `_`, `.`, `-`. Substitutions are rejected because
+// volumes are referenced by literal name, not by interpolated path.
+export const VOLUME_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+
 export interface MountConfig {
   type?: "bind" | "volume";
   source: string;

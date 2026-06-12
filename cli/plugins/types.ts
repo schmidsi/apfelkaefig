@@ -33,6 +33,11 @@ export interface BuiltInPlugin {
   id: keyof PluginConfigMap;
   aliases: string[];
   description: string;
+  // Validate this plugin's raw config object from .apfelkaefig.json. Throw a
+  // plain Error with the user-facing message; the config layer wraps it in a
+  // ConfigError carrying the source path. (Plugins can't throw ConfigError
+  // directly — importing it from config.ts would create an import cycle.)
+  validateConfig?: (config: Record<string, unknown>) => void;
   defaultConfig:
     | Record<string, unknown>
     | ((ctx: PluginContext) => Record<string, unknown>);

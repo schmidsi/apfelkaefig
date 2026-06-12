@@ -7,6 +7,7 @@ import {
   type ImageConfig,
   type MountConfig,
   SCHEMA_VERSION,
+  VOLUME_NAME_RE,
 } from "./schema.ts";
 import { listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
 
@@ -157,11 +158,6 @@ function validateImage(v: unknown, sourcePath?: string): void {
     sourcePath,
   );
 }
-
-// Volume names follow Apple `container`'s convention — alphanumeric start,
-// then alphanumerics plus `_`, `.`, `-`. Substitutions are rejected because
-// volumes are referenced by literal name, not by interpolated path.
-const VOLUME_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 
 function validateMounts(v: unknown, sourcePath?: string): void {
   if (!Array.isArray(v)) throw new ConfigError("'mounts' must be an array", sourcePath);
@@ -329,102 +325,14 @@ function validatePluginConfig(id: string, v: unknown, sourcePath?: string): void
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
     throw new ConfigError(`'plugins.${id}' must be an object`, sourcePath);
   }
-  if (!listPlugins().some((p) => p.id === id)) {
+  const plugin = listPlugins().find((p) => p.id === id);
+  if (!plugin) {
     throw new ConfigError(`unknown plugin '${id}'`, sourcePath);
   }
-  const cfg = v as Record<string, unknown>;
-  if (id === "1password") {
-    for (const k of Object.keys(cfg)) {
-      if (k !== "enabled") {
-        throw new ConfigError(`'plugins.${id}' has unknown key '${k}'`, sourcePath);
-      }
-    }
-    if (cfg.enabled !== true && cfg.enabled !== false) {
-      throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
-    }
-    return;
-  }
-  if (id === "crit") {
-    const allowed = ["enabled", "agentIntegration", "installMethod", "version", "port"];
-    for (const k of Object.keys(cfg)) {
-      if (!allowed.includes(k)) {
-        throw new ConfigError(`'plugins.${id}' has unknown key '${k}'`, sourcePath);
-      }
-    }
-    if (cfg.enabled !== true && cfg.enabled !== false) {
-      throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
-    }
-    if (cfg.agentIntegration !== "claude-code") {
-      throw new ConfigError(`'plugins.${id}.agentIntegration' must be 'claude-code'`, sourcePath);
-    }
-    if (cfg.installMethod !== "pinned-release") {
-      throw new ConfigError(`'plugins.${id}.installMethod' must be 'pinned-release'`, sourcePath);
-    }
-    if (typeof cfg.version !== "string" || !/^v\d+\.\d+\.\d+$/.test(cfg.version)) {
-      throw new ConfigError(`'plugins.${id}.version' must look like 'v0.13.0'`, sourcePath);
-    }
-    if (!isPort(cfg.port)) {
-      throw new ConfigError(
-        `'plugins.${id}.port' must be an integer from 1 to 65535`,
-        sourcePath,
-      );
-    }
-  }
-  if (id === "telegram") {
-    const allowed = [
-      "enabled",
-      "repo",
-      "sha",
-      "storage",
-      "userIsolation",
-      "configVolume",
-      "stateVolume",
-    ];
-    for (const k of Object.keys(cfg)) {
-      if (!allowed.includes(k)) {
-        throw new ConfigError(`'plugins.${id}' has unknown key '${k}'`, sourcePath);
-      }
-    }
-    if (cfg.enabled !== true && cfg.enabled !== false) {
-      throw new ConfigError(`'plugins.${id}.enabled' must be a boolean`, sourcePath);
-    }
-    if (typeof cfg.repo !== "string" || !/^https:\/\/[^\s]+\.git$/.test(cfg.repo)) {
-      throw new ConfigError(
-        `'plugins.${id}.repo' must be an https git URL ending in .git`,
-        sourcePath,
-      );
-    }
-    if (typeof cfg.sha !== "string" || !/^[a-f0-9]{40}$/.test(cfg.sha)) {
-      throw new ConfigError(
-        `'plugins.${id}.sha' must be a 40-char lowercase hex commit SHA`,
-        sourcePath,
-      );
-    }
-    if (cfg.storage !== "instance" && cfg.storage !== "named" && cfg.storage !== "host") {
-      throw new ConfigError(
-        `'plugins.${id}.storage' must be 'instance', 'named', or 'host'`,
-        sourcePath,
-      );
-    }
-    if (cfg.userIsolation !== true && cfg.userIsolation !== false) {
-      throw new ConfigError(`'plugins.${id}.userIsolation' must be a boolean`, sourcePath);
-    }
-    if (cfg.userIsolation === true && cfg.storage === "host") {
-      throw new ConfigError(
-        `'plugins.${id}.userIsolation' cannot be true when storage is 'host'`,
-        sourcePath,
-      );
-    }
-    for (const key of ["configVolume", "stateVolume"] as const) {
-      if (key in cfg && cfg[key] !== undefined) {
-        if (typeof cfg[key] !== "string" || !VOLUME_NAME_RE.test(cfg[key] as string)) {
-          throw new ConfigError(
-            `'plugins.${id}.${key}' must match ${VOLUME_NAME_RE}`,
-            sourcePath,
-          );
-        }
-      }
-    }
+  try {
+    plugin.validateConfig?.(v as Record<string, unknown>);
+  } catch (err) {
+    throw new ConfigError((err as Error).message, sourcePath);
   }
 }
 

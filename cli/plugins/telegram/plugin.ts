@@ -23,7 +23,12 @@ import type {
   PluginDoctorContext,
   SetupStep,
 } from "../types.ts";
-import type { ApfelkaefigConfig, MountConfig, TelegramStorage } from "../../lib/schema.ts";
+import {
+  type ApfelkaefigConfig,
+  type MountConfig,
+  type TelegramStorage,
+  VOLUME_NAME_RE,
+} from "../../lib/schema.ts";
 
 const DEFAULT_REPO = "https://github.com/gskril/telegram-cli.git";
 // Latest gskril/telegram-cli HEAD at plugin time. Bump by hand when the
@@ -49,6 +54,47 @@ export const telegramPlugin: BuiltInPlugin = {
   id: "telegram",
   aliases: ["tg"],
   description: "Install gskril/telegram-cli with per-project isolated session storage.",
+  validateConfig(config) {
+    const allowed = [
+      "enabled",
+      "repo",
+      "sha",
+      "storage",
+      "userIsolation",
+      "configVolume",
+      "stateVolume",
+    ];
+    for (const k of Object.keys(config)) {
+      if (!allowed.includes(k)) {
+        throw new Error(`'plugins.telegram' has unknown key '${k}'`);
+      }
+    }
+    if (config.enabled !== true && config.enabled !== false) {
+      throw new Error("'plugins.telegram.enabled' must be a boolean");
+    }
+    if (typeof config.repo !== "string" || !/^https:\/\/[^\s]+\.git$/.test(config.repo)) {
+      throw new Error("'plugins.telegram.repo' must be an https git URL ending in .git");
+    }
+    if (typeof config.sha !== "string" || !/^[a-f0-9]{40}$/.test(config.sha)) {
+      throw new Error("'plugins.telegram.sha' must be a 40-char lowercase hex commit SHA");
+    }
+    if (config.storage !== "instance" && config.storage !== "named" && config.storage !== "host") {
+      throw new Error("'plugins.telegram.storage' must be 'instance', 'named', or 'host'");
+    }
+    if (config.userIsolation !== true && config.userIsolation !== false) {
+      throw new Error("'plugins.telegram.userIsolation' must be a boolean");
+    }
+    if (config.userIsolation === true && config.storage === "host") {
+      throw new Error("'plugins.telegram.userIsolation' cannot be true when storage is 'host'");
+    }
+    for (const key of ["configVolume", "stateVolume"] as const) {
+      if (key in config && config[key] !== undefined) {
+        if (typeof config[key] !== "string" || !VOLUME_NAME_RE.test(config[key] as string)) {
+          throw new Error(`'plugins.telegram.${key}' must match ${VOLUME_NAME_RE}`);
+        }
+      }
+    }
+  },
   defaultConfig(_ctx) {
     return {
       enabled: true,
