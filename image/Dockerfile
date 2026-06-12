@@ -35,9 +35,13 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # Non-root user
 RUN useradd -m -s /bin/bash node
 
-# Install Claude Code as the node user so its self-update path works.
+# Install Claude Code as the node user so its self-update path works. Pinned
+# so bumping the version busts the Docker layer cache (an unpinned `| bash`
+# would keep serving the stale cached layer on rebuilds) and changes the
+# content hash → new base tag.
+ARG CLAUDE_CODE_VERSION=2.1.175
 USER node
-RUN curl -fsSL https://claude.ai/install.sh | bash
+RUN curl -fsSL https://claude.ai/install.sh | bash -s ${CLAUDE_CODE_VERSION}
 ENV PATH="/home/node/.local/bin:$PATH"
 
 USER root
