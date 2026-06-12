@@ -120,3 +120,14 @@ Deno.test("eject --bash: emits publish flags", async () => {
     assert(start.includes(`"\${publish_flags[@]}"`), "publish flags not passed to container run");
   });
 });
+
+Deno.test("eject: malformed config exits 1 instead of throwing", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({ version: 1, bogusKey: true }),
+    );
+    const code = await runEject({ cwd: dir, target: "bash" });
+    assertEquals(code, 1);
+  });
+});

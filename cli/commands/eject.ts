@@ -13,7 +13,7 @@
 import { join } from "@std/path";
 import { ensureDir } from "@std/fs";
 import { writeIfMissing } from "../lib/fs.ts";
-import { effective, resolveConfig, type ResolvedConfig } from "../lib/config.ts";
+import { ConfigError, effective, resolveConfig, type ResolvedConfig } from "../lib/config.ts";
 import { projectImageTag } from "../lib/container.ts";
 
 // The embedded built-in Dockerfile, written into the project when ejecting
@@ -31,7 +31,16 @@ export interface EjectOptions {
 }
 
 export async function runEject(opts: EjectOptions): Promise<number> {
-  const resolved = await resolveConfig({ cwd: opts.cwd });
+  let resolved;
+  try {
+    resolved = await resolveConfig({ cwd: opts.cwd });
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(`akf eject: ${err.message}${err.path ? ` (${err.path})` : ""}`);
+      return 1;
+    }
+    throw err;
+  }
 
   if (opts.target === "devcontainer") {
     return await ejectDevcontainer(opts, resolved);

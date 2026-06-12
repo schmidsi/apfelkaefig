@@ -2,6 +2,7 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { addPluginToWorkspace } from "./plugin.ts";
 import { runInit } from "./init.ts";
+import { PluginError } from "../lib/plugins.ts";
 
 async function withTmpDir(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "akf-plugin-test-" });
@@ -73,7 +74,7 @@ Deno.test("plugin add refuses edited owned marker block", async () => {
     );
     await assertRejects(
       () => addPluginToWorkspace({ cwd: dir, plugin: "1password" }),
-      Error,
+      PluginError,
       "differs from generated content",
     );
   });
@@ -128,7 +129,7 @@ Deno.test("plugin add crit refuses edited Dockerfile owned block", async () => {
     await Deno.writeTextFile(dockerfilePath, dockerfile.replace("crit --version", "echo edited"));
     await assertRejects(
       () => addPluginToWorkspace({ cwd: dir, plugin: "crit" }),
-      Error,
+      PluginError,
       "differs from generated content",
     );
   });

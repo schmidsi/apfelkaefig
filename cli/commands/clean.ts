@@ -14,7 +14,7 @@ import {
   type Runner,
   stopContainer,
 } from "../lib/container.ts";
-import { resolveConfig } from "../lib/config.ts";
+import { ConfigError, resolveConfig } from "../lib/config.ts";
 import { resolveImageRef } from "../lib/container.ts";
 import { builtInImage } from "../lib/baseimage.ts";
 
@@ -27,7 +27,16 @@ export interface CleanOptions {
 
 export async function runClean(opts: CleanOptions): Promise<number> {
   const run = opts.run ?? realRunner;
-  const resolved = await resolveConfig({ cwd: opts.cwd });
+  let resolved;
+  try {
+    resolved = await resolveConfig({ cwd: opts.cwd });
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(`akf clean: ${err.message}${err.path ? ` (${err.path})` : ""}`);
+      return 1;
+    }
+    throw err;
+  }
   const projectTag = projectImageTag(resolved.workspaceDir);
   const base = await builtInImage();
   const image = resolveImageRef(resolved.config, resolved.workspaceDir, { ref: base.ref });

@@ -6,6 +6,7 @@ import {
   getPlugin,
   listPlugins,
   pluginDockerfileBlocks,
+  PluginError,
   type PluginId,
   pluginMarkerBlocks,
   pluginPostApplyMessages,
@@ -101,14 +102,16 @@ export async function addPluginToWorkspace(
 
   const markerStatuses = [];
   await ensureDockerfileBaseIfNeeded(workspaceDir, after);
-  for (const block of pluginDockerfileBlocks(after)) {
+  for (const block of [...pluginDockerfileBlocks(after), ...pluginMarkerBlocks(after)]) {
     const path = join(workspaceDir, block.path);
-    const status = await upsertBlock(path, block.startMarker, block.endMarker, block.contents);
-    markerStatuses.push({ path: block.path, status });
-  }
-  for (const block of pluginMarkerBlocks(after)) {
-    const path = join(workspaceDir, block.path);
-    const status = await upsertBlock(path, block.startMarker, block.endMarker, block.contents);
+    let status: UpsertStatus;
+    try {
+      status = await upsertBlock(path, block.startMarker, block.endMarker, block.contents);
+    } catch (err) {
+      // Drift refusal (edited owned block) is a designed path — surface it as a
+      // clean CLI error instead of an uncaught stack trace.
+      throw new PluginError((err as Error).message);
+    }
     markerStatuses.push({ path: block.path, status });
   }
 
