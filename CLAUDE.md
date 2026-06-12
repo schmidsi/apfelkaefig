@@ -14,8 +14,8 @@ for themselves.
 ## Repo orientation
 
 - **Language:** Deno + TypeScript. Entry point `cli/main.ts`.
-- **Commands:** `cli/commands/{up,init,build,eject,clean,doctor}.ts` — six subcommands dispatched
-  from `main.ts`.
+- **Commands:** `cli/commands/{up,init,build,eject,clean,doctor,plugin,statusline}.ts` — eight
+  subcommands dispatched from `main.ts`.
 - **Config schema:** `schema/v1.json` (JSON Schema Draft 7). `.apfelkaefig.json` is JSONC; unknown
   top-level keys are a **hard error** — promote to `.devcontainer/devcontainer.json` (tier 3) when
   you outgrow the schema.

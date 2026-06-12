@@ -13,9 +13,10 @@ import denoJson from "../deno.json" with { type: "json" };
 const USAGE = `akf — dev sandboxes on Apple container (der Käfer im Apfel)
 
 Usage:
-  akf up [--rebuild] [-- cmd args…]
+  akf up [--rebuild] [--image <ref>] [-- cmd args…]
                            Launch the sandbox (built-in image if no config).
                            --rebuild forces an image rebuild/refresh.
+                           --image overrides the image for this run.
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
   akf plugin list|explain|add
