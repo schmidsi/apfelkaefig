@@ -13,8 +13,8 @@ import { findOpToken, TruncatedTokenError } from "../lib/secrets.ts";
 import { builtInImage } from "../lib/baseimage.ts";
 import { pluginDoctorChecks } from "../lib/plugins.ts";
 
-const MIN_CONTAINER_MAJOR = 0;
-const MIN_CONTAINER_MINOR = 9;
+const MIN_CONTAINER_MAJOR = 1;
+const MIN_CONTAINER_MINOR = 0;
 
 type Severity = "ok" | "warn" | "fail" | "info";
 
