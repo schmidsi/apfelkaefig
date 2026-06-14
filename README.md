@@ -80,12 +80,10 @@ scaffold by hand.
 ## Requirements
 
 - macOS on Apple Silicon
-- [Apple `container`](https://github.com/apple/container) v0.9 or newer
-- Docker — only when a project ships a custom `Dockerfile` (Apple `container`'s builder has DNS bugs
-  in v0.9). Drive-by mode does not need Docker.
+- [Apple `container`](https://github.com/apple/container) 1.0 or newer — custom `Dockerfile` builds
+  go straight through `container build` (no Docker needed).
 
-`akf doctor` checks the above and only complains about Docker / 1Password when the active config
-needs them.
+`akf doctor` checks the above and only complains about 1Password when the active config needs it.
 
 ## Why
 

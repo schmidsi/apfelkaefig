@@ -62,8 +62,8 @@ export async function runUp(opts: UpOptions): Promise<number> {
   for (const w of resolved.warnings) console.error(`warning: ${w}`);
 
   // Resolve the built-in base image. When `image/Dockerfile` is embedded in
-  // the binary, materialize it into a content-hashed cache dir so docker has
-  // a build context. AKF_BASE_IMAGE override skips the embedded path.
+  // the binary, materialize it into a content-hashed cache dir so the builder
+  // has a build context. AKF_BASE_IMAGE override skips the embedded path.
   const base = await builtInImage();
   let baseDockerfilePath: string | undefined;
   if (base.embedded) {

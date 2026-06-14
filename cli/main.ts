@@ -23,8 +23,8 @@ Usage:
                            Manage built-in sandbox plugins.
   akf statusline           Install the Claude Code statusline helper into
                            ~/.claude/bin/ (one-time, global).
-  akf build [--from-dockerfile <path>] [--no-cleanup]
-                           Build a custom image (Docker → local registry → Apple container).
+  akf build [--from-dockerfile <path>]
+                           Build a custom image with Apple container build.
   akf eject --devcontainer | --bash [--force]
                            Write self-contained artifacts. One-way.
   akf clean [--images] [--all]
@@ -151,13 +151,11 @@ async function dispatchInit(rest: string[]): Promise<number> {
 async function dispatchBuild(rest: string[]): Promise<number> {
   const flags = parseArgs(rest, {
     string: ["from-dockerfile", "tag"],
-    boolean: ["no-cleanup"],
   });
   return await runBuild({
     cwd: Deno.cwd(),
     fromDockerfile: flags["from-dockerfile"],
     tag: flags.tag,
-    noCleanup: flags["no-cleanup"],
   });
 }
 

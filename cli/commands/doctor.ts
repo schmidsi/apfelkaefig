@@ -1,13 +1,7 @@
 // `akf doctor` — preflight checks. Exit code is 0 when everything OK or only
 // warnings, 1 when at least one hard-fail check fails.
 
-import {
-  containerVersion,
-  dockerStatus,
-  imageExists,
-  realRunner,
-  type Runner,
-} from "../lib/container.ts";
+import { containerVersion, imageExists, realRunner, type Runner } from "../lib/container.ts";
 import { ConfigError, findConfig, resolveConfig } from "../lib/config.ts";
 import { findOpToken, TruncatedTokenError } from "../lib/secrets.ts";
 import { builtInImage } from "../lib/baseimage.ts";
@@ -103,43 +97,10 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
     }
   }
 
-  // Resolve built-in image up front so we can decide whether docker is needed.
+  // Resolve built-in image up front for the base-image cache check below.
+  // Building no longer needs Docker — `container build` produces images
+  // directly in `container`'s store (container 1.0 fixed the v0.9 DNS bug).
   const base = await builtInImage();
-
-  // Docker — required when a project Dockerfile is in scope OR when the
-  // built-in base image is embedded (MVP: no ghcr.io publishing yet, so the
-  // base image is built locally on first `akf up`).
-  const projectDockerfile = !!(resolved && typeof resolved.config.image === "object" &&
-    resolved.config.image && "dockerfile" in resolved.config.image);
-  const builtInNeedsBuild = !!base.embedded && resolved?.config.image === undefined;
-  const dockerNeeded = projectDockerfile || builtInNeedsBuild;
-  if (dockerNeeded) {
-    const ds = await dockerStatus(run);
-    const reason = projectDockerfile
-      ? "config has image.dockerfile"
-      : "built-in base image is built locally (ghcr.io publishing deferred)";
-    if (ds === "ok") {
-      checks.push({ label: "docker", severity: "ok", detail: `running (${reason})` });
-    } else if (ds === "missing") {
-      checks.push({
-        label: "docker",
-        severity: "fail",
-        detail: `required (${reason}) but not found on PATH`,
-      });
-    } else {
-      checks.push({
-        label: "docker",
-        severity: "fail",
-        detail: `installed but daemon not running — start with: open -a Docker`,
-      });
-    }
-  } else {
-    checks.push({
-      label: "docker",
-      severity: "info",
-      detail: "not required",
-    });
-  }
 
   // 1Password — only required when secrets.onepassword: true.
   const opRequired = resolved?.config.secrets?.onepassword === true;

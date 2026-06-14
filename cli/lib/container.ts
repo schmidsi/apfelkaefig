@@ -274,18 +274,6 @@ export async function pullImage(ref: string, run: Runner = realRunner): Promise<
   return await run("container", ["image", "pull", ref]);
 }
 
-export async function pullImageHttp(ref: string, run: Runner = realRunner): Promise<CmdResult> {
-  return await run("container", ["image", "pull", "--scheme", "http", ref]);
-}
-
-export async function tagImage(
-  src: string,
-  dst: string,
-  run: Runner = realRunner,
-): Promise<CmdResult> {
-  return await run("container", ["image", "tag", src, dst]);
-}
-
 export async function listContainers(
   run: Runner = realRunner,
 ): Promise<{ id: string; image: string; status: string }[]> {
@@ -317,19 +305,4 @@ export async function rmContainer(id: string, run: Runner = realRunner): Promise
 
 export async function rmImage(ref: string, run: Runner = realRunner): Promise<CmdResult> {
   return await run("container", ["image", "rm", ref], { stdout: "null", stderr: "null" });
-}
-
-// --- docker preflight ---
-
-export type DockerStatus = "ok" | "missing" | "daemon-down";
-
-// Distinguish "docker not installed" from "docker installed but daemon
-// isn't running". Used by `akf build` to fail fast with a useful suggestion
-// instead of letting `docker build` surface its raw socket error.
-export async function dockerStatus(run: Runner = realRunner): Promise<DockerStatus> {
-  const v = await run("docker", ["--version"], { stdout: "null", stderr: "null" });
-  if (v.code !== 0) return "missing";
-  const i = await run("docker", ["info"], { stdout: "null", stderr: "null" });
-  if (i.code !== 0) return "daemon-down";
-  return "ok";
 }

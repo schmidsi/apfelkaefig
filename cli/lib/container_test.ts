@@ -2,27 +2,12 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   buildRunArgs,
   claudeProfileLabel,
-  dockerStatus,
   ensureVolumes,
   projectImageTag,
   resolveImageRef,
 } from "./container.ts";
-import type { CmdResult, Runner } from "./container.ts";
+import type { Runner } from "./container.ts";
 import type { ResolvedConfig } from "./config.ts";
-
-function fakeRunner(
-  responses: Record<string, CmdResult>,
-): { run: Runner; calls: { cmd: string; args: string[] }[] } {
-  const calls: { cmd: string; args: string[] }[] = [];
-  const run: Runner = (cmd, args) => {
-    calls.push({ cmd, args });
-    const key = `${cmd} ${args.join(" ")}`;
-    const r = responses[key];
-    if (!r) throw new Error(`no fake response for: ${key}`);
-    return Promise.resolve(r);
-  };
-  return { run, calls };
-}
 
 function resolved(
   partial: Partial<ResolvedConfig["config"]> = {},
@@ -481,27 +466,4 @@ Deno.test("buildRunArgs: applies resources caps", () => {
   assertEquals(out.args[cpus + 1], "4");
   const mem = out.args.indexOf("--memory");
   assertEquals(out.args[mem + 1], "8G");
-});
-
-Deno.test("dockerStatus: 'ok' when both --version and info succeed", async () => {
-  const { run } = fakeRunner({
-    "docker --version": { code: 0, stdout: "", stderr: "" },
-    "docker info": { code: 0, stdout: "", stderr: "" },
-  });
-  assertEquals(await dockerStatus(run), "ok");
-});
-
-Deno.test("dockerStatus: 'missing' when --version fails", async () => {
-  const { run } = fakeRunner({
-    "docker --version": { code: 127, stdout: "", stderr: "docker: not found" },
-  });
-  assertEquals(await dockerStatus(run), "missing");
-});
-
-Deno.test("dockerStatus: 'daemon-down' when info fails but --version succeeds", async () => {
-  const { run } = fakeRunner({
-    "docker --version": { code: 0, stdout: "", stderr: "" },
-    "docker info": { code: 1, stdout: "", stderr: "Cannot connect to the Docker daemon" },
-  });
-  assertEquals(await dockerStatus(run), "daemon-down");
 });

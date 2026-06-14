@@ -1,17 +1,10 @@
 // `akf build` — replaces the per-project build.sh. Builds a custom image with
-// Docker (Apple `container`'s builder has DNS bugs in v0.9), shuttles it
-// through a local registry, and pulls into Apple `container`.
+// Apple `container build` directly into `container`'s image store. No Docker, no
+// registry shuttle — the v0.9 builder DNS bug that required them is fixed in
+// container 1.0.
 
 import { dirname, isAbsolute, resolve } from "@std/path";
-import {
-  dockerStatus,
-  projectImageTag,
-  pullImageHttp,
-  realRunner,
-  type Runner,
-  tagImage,
-} from "../lib/container.ts";
-import { REGISTRY_HOST, startRegistry, stopRegistry } from "../lib/registry.ts";
+import { imageExists, projectImageTag, realRunner, type Runner } from "../lib/container.ts";
 import { ConfigError, resolveConfig } from "../lib/config.ts";
 import { builtInImage, materializeEmbeddedDockerfile } from "../lib/baseimage.ts";
 
@@ -23,7 +16,6 @@ export interface BuildOptions {
   dockerfile?: string;
   tag?: string;
   fromDockerfile?: string;
-  noCleanup?: boolean;
   run?: Runner;
   // Set when building the built-in base image itself. Suppresses AKF_BASE
   // injection (the base is `FROM debian`, not an extension of itself).
@@ -64,43 +56,20 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
   const dockerfilePath = isAbsolute(dockerfile) ? dockerfile : resolve(opts.cwd, dockerfile);
   const buildContext = dirname(dockerfilePath);
 
-  // Preflight Docker before invoking `docker build` so we can emit a useful
-  // suggestion instead of the raw socket error from the docker CLI.
-  const ds = await dockerStatus(run);
-  if (ds === "missing") {
-    console.error(
-      "akf build: docker not found on PATH. Install Docker Desktop:\n" +
-        "           https://docs.docker.com/desktop/install/mac-install/",
-    );
-    return 1;
-  }
-  if (ds === "daemon-down") {
-    console.error(
-      "akf build: Docker is installed but the daemon isn't running.\n" +
-        "           Start it with:  open -a Docker\n" +
-        "           Then retry the same command.",
-    );
-    return 1;
-  }
-
   // Expose the built-in base to the project build as the AKF_BASE build-arg so
   // a custom Dockerfile can `ARG AKF_BASE` / `FROM ${AKF_BASE}` instead of
   // hardcoding the content-hashed base tag (which changes when the base does).
-  // When the base isn't in Docker's store yet — e.g. a project that has only
-  // ever used a custom Dockerfile, so the drive-by base build never ran — build
-  // it first so the project's FROM resolves.
+  // When the base isn't in `container`'s store yet — e.g. a project that has
+  // only ever used a custom Dockerfile, so the drive-by base build never ran —
+  // build it first so the project's FROM resolves.
   const baseBuildArgs: string[] = [];
   if (!opts.isBaseBuild) {
     const base = await builtInImage();
     if (base.embedded) {
-      const baseInDocker = await run("docker", ["image", "inspect", base.ref], {
-        stdout: "null",
-        stderr: "null",
-      });
-      if (baseInDocker.code !== 0) {
+      if (!(await imageExists(base.ref, run))) {
         const basePath = await materializeEmbeddedDockerfile(base);
-        console.error(`akf build: base image '${base.ref}' not in Docker — building it first…`);
-        const baseBuild = await run("docker", [
+        console.error(`akf build: base image '${base.ref}' not in container — building it first…`);
+        const baseBuild = await run("container", [
           "build",
           "-t",
           base.ref,
@@ -118,7 +87,7 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
   }
 
   console.error(`akf build: building '${tag}' from ${dockerfilePath}`);
-  const dockerBuild = await run("docker", [
+  const build = await run("container", [
     "build",
     "-t",
     tag,
@@ -127,38 +96,9 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
     ...baseBuildArgs,
     buildContext,
   ]);
-  if (dockerBuild.code !== 0) {
-    console.error("akf build: docker build failed");
-    return dockerBuild.code;
-  }
-
-  console.error("akf build: starting local registry on :5555");
-  await startRegistry(run);
-
-  const remoteRef = `${REGISTRY_HOST}/${tag}`;
-  console.error(`akf build: pushing to ${remoteRef}`);
-  await run("docker", ["tag", tag, remoteRef]);
-  const dockerPush = await run("docker", ["push", remoteRef]);
-  if (dockerPush.code !== 0) {
-    console.error("akf build: docker push to local registry failed");
-    if (!opts.noCleanup) await stopRegistry(run);
-    return dockerPush.code;
-  }
-
-  console.error("akf build: pulling into Apple `container`");
-  const pull = await pullImageHttp(remoteRef, run);
-  if (pull.code !== 0) {
-    console.error("akf build: container pull from local registry failed");
-    if (!opts.noCleanup) await stopRegistry(run);
-    return pull.code;
-  }
-  await tagImage(remoteRef, tag, run);
-
-  if (!opts.noCleanup) {
-    console.error("akf build: stopping registry");
-    await stopRegistry(run);
-  } else {
-    console.error("akf build: leaving registry running (--no-cleanup)");
+  if (build.code !== 0) {
+    console.error("akf build: container build failed");
+    return build.code;
   }
 
   console.error(`akf build: done. Image '${tag}' is ready for Apple \`container\`.`);
