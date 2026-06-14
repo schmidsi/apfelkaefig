@@ -8,6 +8,7 @@ import {
 } from "../plugins/types.ts";
 import { onePasswordPlugin } from "../plugins/1password/plugin.ts";
 import { critPlugin } from "../plugins/crit/plugin.ts";
+import { sshPlugin } from "../plugins/ssh/plugin.ts";
 import { telegramPlugin } from "../plugins/telegram/plugin.ts";
 
 export type { BuiltInPlugin, MarkerBlock, PluginContext, PluginDoctorCheck, SetupStep };
@@ -18,6 +19,7 @@ const REGISTRY: Record<PluginId, BuiltInPlugin> = {
   "1password": onePasswordPlugin,
   "crit": critPlugin,
   "telegram": telegramPlugin,
+  "ssh": sshPlugin,
 };
 
 const ALIASES = new Map<string, PluginId>();

@@ -99,6 +99,24 @@ Deno.test("buildRunArgs: custom command + extra env", () => {
   assert(envIdx > 0, "token not forwarded");
 });
 
+Deno.test("buildRunArgs: commandOverride and userOverride replace command and user", () => {
+  const out = buildRunArgs({
+    resolved: resolved({ command: ["claude"] }),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+    commandOverride: ["/usr/local/bin/akf-sshd"],
+    userOverride: "root",
+    tty: false,
+  });
+  // Command override wins over the resolved command.
+  assertEquals(out.args.slice(-2), ["img", "/usr/local/bin/akf-sshd"]);
+  // -u carries the override; non-TTY uses -i (not -it).
+  const uIdx = out.args.indexOf("-u");
+  assertEquals(out.args[uIdx + 1], "root");
+  assert(out.args.includes("-i") && !out.args.includes("-it"), "expected -i without -it");
+});
+
 Deno.test("buildRunArgs: injects AKF_SANDBOX and AKF_PROJECT_NAME", () => {
   const out = buildRunArgs({
     resolved: resolved({}),

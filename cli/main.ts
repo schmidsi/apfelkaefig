@@ -13,10 +13,12 @@ import denoJson from "../deno.json" with { type: "json" };
 const USAGE = `akf — dev sandboxes on Apple container (der Käfer im Apfel)
 
 Usage:
-  akf up [--rebuild] [--image <ref>] [-- cmd args…]
+  akf up [--rebuild] [--image <ref>] [--serve] [-- cmd args…]
                            Launch the sandbox (built-in image if no config).
                            --rebuild forces an image rebuild/refresh.
                            --image overrides the image for this run.
+                           --serve runs sshd in the foreground so desktop
+                           agents can attach over SSH (requires the ssh plugin).
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
   akf plugin list|explain|add
@@ -92,13 +94,19 @@ async function main(argv: string[]): Promise<number> {
 export type UpArgs =
   | { kind: "help" }
   | { kind: "error"; message: string }
-  | { kind: "run"; positional: string[]; imageOverride?: string; rebuild: boolean };
+  | {
+    kind: "run";
+    positional: string[];
+    imageOverride?: string;
+    rebuild: boolean;
+    serve: boolean;
+  };
 
 export function parseUpArgs(rest: string[]): UpArgs {
   let unknownFlag: string | undefined;
   const flags = parseArgs(rest, {
     string: ["image"],
-    boolean: ["rebuild", "help"],
+    boolean: ["rebuild", "serve", "help"],
     alias: { h: "help" },
     "--": true,
     unknown: (arg, key) => {
@@ -119,6 +127,7 @@ export function parseUpArgs(rest: string[]): UpArgs {
     positional: [...flags._.map(String), ...(flags["--"] ?? []).map(String)],
     imageOverride: flags.image,
     rebuild: flags.rebuild,
+    serve: flags.serve,
   };
 }
 
@@ -137,6 +146,7 @@ async function dispatchUp(rest: string[]): Promise<number> {
     positional: parsed.positional,
     imageOverride: parsed.imageOverride,
     rebuild: parsed.rebuild,
+    serve: parsed.serve,
   });
 }
 

@@ -13,7 +13,7 @@ import {
   resolveImageRef,
   type Runner,
 } from "../lib/container.ts";
-import { ConfigError, resolveConfig } from "../lib/config.ts";
+import { ConfigError, resolveConfig, substitute } from "../lib/config.ts";
 import { resolveOp, SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
 import { runBuild } from "./build.ts";
 
@@ -28,8 +28,13 @@ export interface UpOptions {
   // bumping a pinned dependency, since the existence check would otherwise
   // skip the build entirely.
   rebuild?: boolean;
+  // Run sshd in the foreground instead of the agent, so the desktop apps can
+  // attach over SSH. Requires the `ssh` plugin. Ctrl+C stops it.
+  serve?: boolean;
   run?: Runner;
 }
+
+const SSH_ENTRYPOINT = "/usr/local/bin/akf-sshd";
 
 export async function runUp(opts: UpOptions): Promise<number> {
   const run = opts.run ?? realRunner;
@@ -144,11 +149,59 @@ export async function runUp(opts: UpOptions): Promise<number> {
     throw err;
   }
 
+  // --serve: run sshd in the foreground instead of the agent. Validate the ssh
+  // plugin is enabled, read the authorized public key from the host, and inject
+  // it as env for the entrypoint to install. The host key + port + persistence
+  // come from the ssh plugin's config.
+  let commandOverride: string[] | undefined;
+  let userOverride: string | undefined;
+  let tty: boolean | undefined;
+  if (opts.serve) {
+    const ssh = resolved.config.plugins?.ssh;
+    if (!ssh?.enabled) {
+      console.error(
+        "akf up: --serve requires the ssh plugin. Run `akf plugin add ssh` first.",
+      );
+      return 1;
+    }
+    const keyPath = substitute(ssh.authorizedKey, {
+      workspaceFolder: resolved.workspaceDir,
+      env: Deno.env.toObject(),
+    });
+    let pubKey: string;
+    try {
+      pubKey = (await Deno.readTextFile(keyPath)).trim();
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        console.error(
+          `akf up: --serve: authorized key not found at ${keyPath}\n` +
+            `       set 'plugins.ssh.authorizedKey' or create the key, then retry.`,
+        );
+        return 1;
+      }
+      throw err;
+    }
+    extraEnv = { ...extraEnv, AKF_SSH_AUTHORIZED_KEY: pubKey };
+    commandOverride = [SSH_ENTRYPOINT];
+    userOverride = "root";
+    tty = false;
+    console.error(
+      `akf up: serving sshd — connect with:\n` +
+        `         Host:     node@127.0.0.1\n` +
+        `         Port:     ${ssh.port}\n` +
+        `         Identity: the private key matching ${keyPath}\n` +
+        `       logs follow; Ctrl+C to stop.`,
+    );
+  }
+
   const built = buildRunArgs({
     resolved,
     workspaceHostPath: resolved.workspaceDir,
     imageRef: image.ref,
     extraEnv,
+    commandOverride,
+    userOverride,
+    tty,
   });
 
   // Forward SIGINT so the container exits cleanly. Deno's child inherits the

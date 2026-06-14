@@ -59,10 +59,19 @@ export interface TelegramPluginConfig {
   [key: string]: unknown;
 }
 
+export interface SshPluginConfig {
+  enabled: boolean;
+  authorizedKey: string;
+  port: number;
+  hostKeyVolume?: string;
+  [key: string]: unknown;
+}
+
 export interface PluginConfigMap {
   "1password"?: OnePasswordPluginConfig;
   "crit"?: CritPluginConfig;
   "telegram"?: TelegramPluginConfig;
+  "ssh"?: SshPluginConfig;
 }
 
 export type ImageConfig =

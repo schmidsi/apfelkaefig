@@ -2,21 +2,21 @@
 
 ## Context
 
-The Claude Code desktop/web app (and Codex, Cursor, …) can "Add SSH connection" — *connect to a
-remote machine to run Claude Code*. The app stays local; only the **agent process** runs on the
+The Claude Code desktop/web app (and Codex, Cursor, …) can "Add SSH connection" — _connect to a
+remote machine to run Claude Code_. The app stays local; only the **agent process** runs on the
 remote, reached over SSH. An apfelkäfig micro-VM is exactly that kind of remote: it already ships
 the agent in the image (`image/Dockerfile:42-44`), already has the mounts and the hermetic story.
 
 Today `akf up` (`cli/commands/up.ts:156-178`) execs `container run` with the TTY inherited: the
-agent runs *inside* the VM and you drive it through your terminal — one ephemeral interactive
+agent runs _inside_ the VM and you drive it through your terminal — one ephemeral interactive
 session. The SSH model inverts that: the box runs `sshd`, the native app attaches over SSH, and your
 terminal does something else entirely.
 
 This task adds that "something else": a **foreground server mode**. Not a background daemon —
 `akf up --serve` runs in the foreground, streams sshd's logs, and `Ctrl+C` tears it down. Same
-lifecycle muscle-memory as `vite` / `next dev` / `docker compose up` (no `-d`). There is deliberately
-**no detach, no `stop`/`status` command, no orphaned container** — the lifecycle is "the terminal is
-open."
+lifecycle muscle-memory as `vite` / `next dev` / `docker compose up` (no `-d`). There is
+deliberately **no detach, no `stop`/`status` command, no orphaned container** — the lifecycle is
+"the terminal is open."
 
 ### The seam: plugin vs. core
 
@@ -38,11 +38,11 @@ They compose: `akf plugin add ssh` once, then `akf up --serve` whenever you want
 ## Out of scope
 
 - **Auto-editing `~/.ssh/config`.** akf only writes files it owns; the user's curated SSH config is
-  on the wrong side of that line (a bad render there can lock you out of *other* hosts). The plugin
+  on the wrong side of that line (a bad render there can lock you out of _other_ hosts). The plugin
   **prints** connection details for the app's explicit Host/Port/Identity fields. A managed
   `Include` file is a possible future follow-up, not this task.
-- **A background daemon / `akf daemon` command.** Explicitly rejected — foreground only. No
-  detach, no `stop`/`status`. Revisit only if a real reconnect-lifecycle need appears.
+- **A background daemon / `akf daemon` command.** Explicitly rejected — foreground only. No detach,
+  no `stop`/`status`. Revisit only if a real reconnect-lifecycle need appears.
 - **ghcr.io base-image distribution.** Unchanged (`TODO.md`); `sshd` is added via the project
   `.devcontainer/Dockerfile` block like every other plugin, not baked into the embedded base.
 - **Multi-key / SSH CA / agent-forwarding.** One authorized public key, path-configurable. Enough to
@@ -61,34 +61,35 @@ Mirror the telegram plugin's shape (`BuiltInPlugin` in `cli/plugins/types.ts:32-
 interface SshConfig {
   enabled: boolean;
   authorizedKey: string; // host path to a PUBLIC key; default ${localEnv:HOME}/.ssh/id_ed25519.pub
-  port: number;          // host port to publish container :22 on; default 2222
-  hostKeyVolume?: string;// named volume for persistent host key; default derived from workspace
+  port: number; // host port to publish container :22 on; default 2222
+  hostKeyVolume?: string; // named volume for persistent host key; default derived from workspace
 }
 ```
 
-- **`defaultConfig`** → `{ enabled: true, authorizedKey: "${localEnv:HOME}/.ssh/id_ed25519.pub",
+- **`defaultConfig`** →
+  `{ enabled: true, authorizedKey: "${localEnv:HOME}/.ssh/id_ed25519.pub",
   port: 2222 }`.
-- **`validateConfig`** → reject unknown keys (telegram pattern, `telegram/plugin.ts:57-97`);
-  `port` an integer in 1024–65535; `authorizedKey` a non-empty string; `hostKeyVolume` (if set)
-  matches `VOLUME_NAME_RE`.
+- **`validateConfig`** → reject unknown keys (telegram pattern, `telegram/plugin.ts:57-97`); `port`
+  an integer in 1024–65535; `authorizedKey` a non-empty string; `hostKeyVolume` (if set) matches
+  `VOLUME_NAME_RE`.
 - **`applyConfig`** (model on `telegram/plugin.ts:107-142`):
   - Set `image = { dockerfile: ".devcontainer/Dockerfile" }` (plugins that add Dockerfile blocks
     require tier-2; telegram does the same).
   - Add a **bind mount** of the public key to a read-only staging path:
     `{ type: "bind", source: authorizedKey, target: "/run/akf/authorized_keys", readonly: true }`.
-    Staging + entrypoint-copy (below) sidesteps sshd `StrictModes` ownership/permission checks that a
-    raw read-only virtiofs mount at `~/.ssh/authorized_keys` would trip.
+    Staging + entrypoint-copy (below) sidesteps sshd `StrictModes` ownership/permission checks that
+    a raw read-only virtiofs mount at `~/.ssh/authorized_keys` would trip.
   - Add a **named volume** for the host key:
     `{ type: "volume", source: <hostKeyVol>, target: "/var/lib/akf-ssh" }`, where `<hostKeyVol>`
     defaults to `ssh-${projectSlug(workspaceDir)}-hostkey` (reuse `projectSlug` from
-    `cli/lib/fs.ts`, as telegram does at `telegram/plugin.ts:214`). This is the *persistent host
-    identity* — see "Host-key persistence" below.
+    `cli/lib/fs.ts`, as telegram does at `telegram/plugin.ts:214`). This is the _persistent host
+    identity_ — see "Host-key persistence" below.
   - Add the **published port**: `ports: [{ hostIp: "127.0.0.1", host: port, container: 22 }]`
     (schema already supports `ports`; emitted by `buildRunArgs` at `container.ts:74-78`). Publishing
     to `127.0.0.1` keeps the endpoint **stable** (`localhost:<port>`) regardless of the per-run
     container IP, and keeps sshd off any non-loopback host interface.
-- **`dockerfileBlocks`** → one block in `.devcontainer/Dockerfile`
-  (markers `# >>> akf plugin: ssh` / `# <<< akf plugin: ssh`) that:
+- **`dockerfileBlocks`** → one block in `.devcontainer/Dockerfile` (markers `# >>> akf plugin: ssh`
+  / `# <<< akf plugin: ssh`) that:
   - `apt-get install -y --no-install-recommends openssh-server`.
   - Writes `/etc/ssh/sshd_config.d/akf.conf`:
     ```
@@ -111,7 +112,8 @@ interface SshConfig {
 - **`doctorChecks`** → (a) Dockerfile block present (reuse the telegram `dockerfileBlockCheck`
   shape, `telegram/plugin.ts:375-398`); (b) `authorizedKey` file exists on the host and looks like a
   public key (`fail` if missing — connecting is impossible without it).
-- **`setupSteps`** → `{ command: "akf up --serve", description: "start the SSH-reachable sandbox" }`.
+- **`setupSteps`** →
+  `{ command: "akf up --serve", description: "start the SSH-reachable sandbox" }`.
 - **`postApplyMessages`** → the connection guidance, e.g.:
   ```
   Reachable over SSH while `akf up --serve` is running.
@@ -119,9 +121,9 @@ interface SshConfig {
   Host key persists in volume '<hostKeyVol>' so reconnects don't trip known_hosts.
   ```
 
-Register it: add `sshPlugin` to the `REGISTRY` in `cli/lib/plugins.ts:17-21` and the `PluginConfigMap`
-in `cli/lib/schema.ts` (+ `schema/v1.json`), following the telegram precedent (grep
-`"telegram"` across `cli/lib/schema.ts` and `schema/v1.json` and mirror every hit).
+Register it: add `sshPlugin` to the `REGISTRY` in `cli/lib/plugins.ts:17-21` and the
+`PluginConfigMap` in `cli/lib/schema.ts` (+ `schema/v1.json`), following the telegram precedent
+(grep `"telegram"` across `cli/lib/schema.ts` and `schema/v1.json` and mirror every hit).
 
 ### Layer 2 — `akf up --serve` (foreground run-mode)
 
@@ -132,11 +134,11 @@ in `cli/lib/schema.ts` (+ `schema/v1.json`), following the telegram precedent (g
 - **`cli/commands/up.ts`** — add `serve?: boolean` to `UpOptions` (`up.ts:20-32`). When `serve`:
   - Override the in-container command to `["/usr/local/bin/akf-sshd"]` and force **non-TTY** so
     stdout/stderr stream as logs.
-  - Print a connection banner to stderr *before* spawning (Host/Port/Identity, pulled from the
+  - Print a connection banner to stderr _before_ spawning (Host/Port/Identity, pulled from the
     resolved `ssh` plugin config), then "logs follow; Ctrl+C to stop".
-  - Spawn / SIGINT-forward path is **unchanged** (`up.ts:156-178`) — that already gives
-    "foreground, Ctrl+C kills it", and `--rm` (`container.ts:72`) removes the container on exit so
-    nothing is left running.
+  - Spawn / SIGINT-forward path is **unchanged** (`up.ts:156-178`) — that already gives "foreground,
+    Ctrl+C kills it", and `--rm` (`container.ts:72`) removes the container on exit so nothing is
+    left running.
   - **Guard:** if `--serve` is passed but the `ssh` plugin is not enabled in resolved config, error
     with a one-liner pointing at `akf plugin add ssh` (the entrypoint/port/key won't exist
     otherwise).
@@ -148,21 +150,23 @@ in `cli/lib/schema.ts` (+ `schema/v1.json`), following the telegram precedent (g
 
 ### Host-key persistence (the one real subtlety)
 
-Because `--serve` publishes a **stable** `127.0.0.1:<port>` endpoint, an *ephemeral* host key would
+Because `--serve` publishes a **stable** `127.0.0.1:<port>` endpoint, an _ephemeral_ host key would
 trip "REMOTE HOST IDENTIFICATION HAS CHANGED" on every reconnect (same host:port, new key). So the
 plugin persists the host key in a per-project named volume (`/var/lib/akf-ssh`), generated once and
-reused. This is the deliberate "pet, not cattle" choice for the *host identity specifically* — the
+reused. This is the deliberate "pet, not cattle" choice for the _host identity specifically_ — the
 workspace and everything else stay disposable; only the box's SSH fingerprint is stable. It's one
-named volume, visible in `.apfelkaefig.json` as a mount the user opted into by adding the plugin — no
-magic, and `akf clean` can drop it like any other volume.
+named volume, visible in `.apfelkaefig.json` as a mount the user opted into by adding the plugin —
+no magic, and `akf clean` can drop it like any other volume.
 
 ## Implementation
 
 ### New files
+
 - `cli/plugins/ssh/plugin.ts` — the plugin (structure per Design / telegram precedent).
 - `cli/plugins/ssh/plugin_test.ts` — unit tests (see Tests).
 
 ### Edited files
+
 - `cli/lib/plugins.ts:9-21` — import + register `sshPlugin`.
 - `cli/lib/schema.ts` — add `ssh` to `PluginConfigMap` and any `SshStorage`-like exported types
   needed; mirror telegram.
@@ -200,7 +204,7 @@ Follow the existing plugin/test conventions (`build_test.ts`, telegram tests, `p
 - **Does Apple `container` actually publish `-p` ports to the host?** The schema and `buildRunArgs`
   already emit `-p`, so it's an existing feature — but confirm `127.0.0.1:2222:22` is reachable from
   the host on `container 1.0`. If host publishing is unreliable, fall back to connecting at the
-  container's own vmnet IP (`container ls` / `inspect`) and print *that* in the banner instead — the
+  container's own vmnet IP (`container ls` / `inspect`) and print _that_ in the banner instead — the
   rest of the design is unchanged, only the banner's Host value differs.
 - **App's SSH config support.** If the desktop app shells out to system `ssh`, `~/.ssh/config` and
   `known_hosts` behave normally; if it uses its own SSH library, the explicit dialog fields still
@@ -235,6 +239,21 @@ Follow the existing plugin/test conventions (`build_test.ts`, telegram tests, `p
      agent inside the box.
    - `Ctrl+C` → sshd stops, container is gone (`container ls -a` shows nothing).
    - Reconnect after a second `akf up --serve` → **no** known_hosts conflict (host key persisted).
-6. Docs: `README.md` (three-tier section — `--serve` is the SSH-reachable mode), and a short
-   `docs/` note if the connection flow needs a screenshot.
+6. Docs: `README.md` (three-tier section — `--serve` is the SSH-reachable mode), and a short `docs/`
+   note if the connection flow needs a screenshot.
 7. Commit autonomously (`simon+agent` identity, `commit.gpgsign=false`).
+
+## As-built notes (deviations from the design above)
+
+- **Authorized key is injected as env, not bind-mounted.** Rather than the
+  `/run/akf/authorized_keys` read-only bind mount, `akf up --serve` reads the host public key and
+  passes its contents as `AKF_SSH_AUTHORIZED_KEY`; the entrypoint writes it to
+  `~/.ssh/authorized_keys` with `chown`/`chmod`. A public key is not secret, and this sidesteps the
+  open question of whether Apple `container` supports single-file bind mounts. The plugin's
+  `applyConfig` therefore adds **no** key mount — only the host-key volume and the published port.
+- **sshd runs as root via `userOverride: "root"`.** `buildRunArgs` normally forces `-u node`; serve
+  mode overrides it so sshd can bind :22 and authenticate the login as `node`. Added
+  `userOverride` + `commandOverride` to `RunFlagsInput` (`cli/lib/container.ts`).
+- **Baked host keys removed + `UsePAM no`.** The Dockerfile block `rm -f /etc/ssh/ssh_host_*` so the
+  persistent volume key is the only authoritative one, and sets `UsePAM no` so PAM doesn't treat the
+  passwordless `node` account as locked and reject pubkey auth.

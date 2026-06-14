@@ -56,6 +56,12 @@ export interface RunFlagsInput {
   // docker/podman. When false, Apple `container` 0.12 fails with a cryptic
   // ENODEV ("Operation not supported by device") if `-t` is forced anyway.
   tty?: boolean;
+  // Replace the resolved config's command with a fixed argv. Used by
+  // `akf up --serve` to run the sshd entrypoint instead of the agent.
+  commandOverride?: string[];
+  // Replace the resolved config's user (`-u`). `akf up --serve` runs as root so
+  // sshd can bind :22 and authenticate the login as the agent user.
+  userOverride?: string;
 }
 
 // Compute the argv for `container run …` minus the leading `container run`.
@@ -143,9 +149,9 @@ export function buildRunArgs(
     args.push("-e", `${k}=${resolved}`);
   }
 
-  args.push("-u", e.user, "-w", sub(e.workspaceFolder));
+  args.push("-u", input.userOverride ?? e.user, "-w", sub(e.workspaceFolder));
   args.push(input.imageRef);
-  args.push(...e.command);
+  args.push(...(input.commandOverride ?? e.command));
 
   return {
     args,
