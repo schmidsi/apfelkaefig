@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const https = require("node:https");
 const os = require("node:os");
-const REPO = "ApfelKaefig/apfelkaefig";
+const REPO = "schmidsi/apfelkaefig";
 const PKG = require("./package.json");
 const VERSION = PKG.version;
 

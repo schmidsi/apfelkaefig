@@ -3,16 +3,17 @@
 The image consumed by `akf up` when a project does not override `image` in its config (drive-by
 mode, tier-2 with no image set, tier-3 with no Dockerfile).
 
-## Status (MVP)
+## How it builds
 
 The Dockerfile in this directory is **embedded into the `akf` binary at compile time** via
 `deno compile --include ./image`. On first `akf up`, it is materialized into
-`~/.cache/apfelkaefig/base/<hash>/Dockerfile` and built locally with Docker. The resulting image is
-tagged `apfelkaefig-base:<hash>` where `<hash>` is the first 12 hex chars of the Dockerfile's
-SHA-256. Cache invalidation is automatic when the Dockerfile changes and the binary is recompiled.
+`~/.cache/apfelkaefig/base/<hash>/Dockerfile` and built with Apple `container build` straight into
+`container`'s image store. The resulting image is tagged `apfelkaefig-base:<hash>` where `<hash>` is
+the first 12 hex chars of the Dockerfile's SHA-256. Cache invalidation is automatic when the
+Dockerfile changes and the binary is recompiled.
 
-Docker is required on the host for this MVP path because Apple `container`'s builder has DNS bugs in
-v0.9 that break the `apt-get` / `curl` steps below.
+No Docker on the host — `container build` handles the `apt-get` / `curl` steps directly (the DNS
+bugs that forced Docker in container v0.9 are fixed as of container 1.0).
 
 ## Future: ghcr.io publishing
 
@@ -25,7 +26,7 @@ fine.
 when iterating on the Dockerfile or testing against a pre-built image:
 
 ```bash
-docker build -t apfelkaefig-base:dev image/
+container build -t apfelkaefig-base:dev image/
 AKF_BASE_IMAGE=apfelkaefig-base:dev akf up
 ```
 
@@ -41,9 +42,9 @@ Minimal — Debian slim plus what every Claude session needs:
 
 Codex, Gemini CLI, Python, and friends are deliberately BYO via a custom Dockerfile that extends
 this base. Declare `ARG AKF_BASE` and start `FROM ${AKF_BASE}`; `akf build` injects
-`AKF_BASE=apfelkaefig-base:<hash>` at build time (and builds the base first if Docker doesn't have
-it cached yet), so you never hardcode the content-hashed tag. Then add whatever else the project
-needs:
+`AKF_BASE=apfelkaefig-base:<hash>` at build time (and builds the base first if `container` doesn't
+have it cached yet), so you never hardcode the content-hashed tag. Then add whatever else the
+project needs:
 
 ```dockerfile
 ARG AKF_BASE

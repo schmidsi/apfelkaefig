@@ -32,8 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     rm -rf /var/lib/apt/lists/* && \
     rm -f /etc/ssh/ssh_host_*
 
-# Minimal, pubkey-only sshd config. UsePAM no avoids PAM treating the
-# passwordless 'node' account as locked and rejecting pubkey auth.
+# Minimal, pubkey-only sshd config. UsePAM no keeps auth self-contained (no
+# PAM stack needed). The entrypoint unlocks 'node' (`passwd -d`) because
+# with UsePAM no, sshd runs its own locked-account check and refuses any
+# account whose shadow password is '!' (the default for a passwordless user).
 RUN printf '%s\n' \
     'PasswordAuthentication no' \
     'PermitRootLogin no' \
@@ -49,6 +51,7 @@ RUN printf '%s\n' \
     '#!/bin/sh' \
     'set -e' \
     'mkdir -p /run/sshd /var/lib/akf-ssh' \
+    'passwd -d node >/dev/null' \
     'if [ ! -f /var/lib/akf-ssh/ssh_host_ed25519_key ]; then ssh-keygen -t ed25519 -N "" -f /var/lib/akf-ssh/ssh_host_ed25519_key; fi' \
     'install -d -m 700 -o node -g node /home/node/.ssh' \
     'if [ -n "$AKF_SSH_AUTHORIZED_KEY" ]; then' \

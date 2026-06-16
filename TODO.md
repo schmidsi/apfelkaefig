@@ -6,8 +6,8 @@ What's not shipped yet. One line per item; detail lives in linked task files.
 
 - Homebrew tap + formula (`apfelkaefig` installing `akf`)
 - npm package `apfelkaefig` — see [`tasks/002_release.md`](tasks/002_release.md) §5
-- ghcr.io base image publishing (`ghcr.io/apfelkaefig/base`) — see
-  [`image/README.md`](image/README.md)
+- ghcr.io base image publishing (`ghcr.io/schmidsi/apfelkaefig-base`) — see
+  [`tasks/002_release.md`](tasks/002_release.md) §7
 
 ## Infrastructure
 

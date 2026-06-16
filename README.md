@@ -16,7 +16,7 @@ Pre-release (v0.2). macOS / Apple Silicon only.
 From source (Deno 1.41+):
 
 ```bash
-git clone https://github.com/ApfelKaefig/apfelkaefig
+git clone https://github.com/schmidsi/apfelkaefig
 cd apfelkaefig
 deno task compile
 cp dist/akf /usr/local/bin/akf

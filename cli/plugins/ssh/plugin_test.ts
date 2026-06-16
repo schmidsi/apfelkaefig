@@ -69,6 +69,9 @@ Deno.test("ssh dockerfileBlocks: installs sshd and the foreground entrypoint", (
   assert(b.contents.includes("sshd -D -e"), "sshd not run in foreground");
   assert(b.contents.includes("/var/lib/akf-ssh/ssh_host_ed25519_key"), "host key path missing");
   assert(b.contents.includes("AKF_SSH_AUTHORIZED_KEY"), "authorized key env not consumed");
+  // The passwordless 'node' account is locked ('!') by default; with UsePAM no
+  // sshd refuses locked accounts, so the entrypoint must unlock it.
+  assert(b.contents.includes("passwd -d node"), "node account not unlocked");
 });
 
 Deno.test("ssh validateConfig: rejects unknown keys and bad port", () => {

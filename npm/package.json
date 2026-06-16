@@ -6,7 +6,7 @@
   "homepage": "https://apfelkaefig.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ApfelKaefig/apfelkaefig.git"
+    "url": "git+https://github.com/schmidsi/apfelkaefig.git"
   },
   "bin": {
     "akf": "bin/akf.js",
