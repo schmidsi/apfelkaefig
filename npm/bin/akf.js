@@ -12,7 +12,7 @@ if (!fs.existsSync(bin)) {
   console.error(
     "apfelkaefig: binary missing. Postinstall did not complete — re-run\n" +
       "             `npm install -g apfelkaefig` or download from\n" +
-      "             https://github.com/ApfelKaefig/apfelkaefig/releases.",
+      "             https://github.com/schmidsi/apfelkaefig/releases.",
   );
   process.exit(1);
 }
