@@ -215,6 +215,12 @@ function renderDockerfile(): string {
   // printf-built files (no heredoc) because the base Dockerfile carries no
   // `# syntax=` directive — matches the telegram plugin's approach.
   return [
+    `# Root for the install/config steps below: this block may be appended after a`,
+    `# Dockerfile that ended as a non-root user (e.g. a project Dockerfile ending`,
+    `# 'USER node'). Runtime user is set separately via 'container run -u', so the`,
+    `# trailing build user here doesn't affect how the sandbox runs.`,
+    `USER root`,
+    ``,
     `# Install sshd so the box is reachable for \`akf up --serve\`. Drop the`,
     `# package-generated host keys: the persistent one in ${HOST_KEY_DIR} (a named`,
     `# volume) is authoritative, generated on first --serve and reused thereafter.`,

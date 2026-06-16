@@ -60,6 +60,12 @@ Deno.test("ssh dockerfileBlocks: installs sshd and the foreground entrypoint", (
   assertEquals(b.path, ".devcontainer/Dockerfile");
   assertEquals(b.startMarker, "# >>> akf plugin: ssh");
   assert(b.contents.includes("openssh-server"), "missing openssh-server install");
+  // Must switch to root: the block may be appended after a Dockerfile ending
+  // 'USER node', and apt-get / writes to /etc/ssh need root.
+  assert(
+    b.contents.indexOf("USER root") < b.contents.indexOf("apt-get"),
+    "block must `USER root` before installing packages",
+  );
   assert(b.contents.includes("sshd -D -e"), "sshd not run in foreground");
   assert(b.contents.includes("/var/lib/akf-ssh/ssh_host_ed25519_key"), "host key path missing");
   assert(b.contents.includes("AKF_SSH_AUTHORIZED_KEY"), "authorized key env not consumed");
