@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>apfelkäfig — disposable dev sandboxes on Apple Silicon</title>
+  <meta name="description" content="Disposable dev sandboxes on Apple Silicon, safe to point coding agents at. akf up boots your project inside an Apple container micro-VM.">
+  <meta property="og:title" content="apfelkäfig">
+  <meta property="og:description" content="Disposable dev sandboxes on Apple Silicon, safe to point coding agents at.">
+  <meta property="og:url" content="https://apfelkaefig.com">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="logo.svg">
+  <style>
+    :root {
+      --bg: #1c1a14;
+      --panel: #26241c;
+      --ink: #f4eccf;
+      --muted: #b7a87f;
+      --gold: #debd6e;
+      --gold-bright: #edd183;
+      --blue: #77bad5;
+      --line: #3a3527;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: radial-gradient(120% 80% at 50% -10%, #2d2a1f 0%, var(--bg) 60%);
+      color: var(--ink);
+      font: 16px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    main {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 5rem) 1.5rem 2rem;
+      flex: 1;
+    }
+    .logo {
+      display: block;
+      width: min(340px, 80%);
+      height: auto;
+      margin: 0 auto 1.5rem;
+    }
+    h1 {
+      font-size: clamp(2.2rem, 7vw, 3.4rem);
+      margin: 0 0 .25rem;
+      text-align: center;
+      letter-spacing: -0.02em;
+      color: var(--gold-bright);
+    }
+    .tag {
+      text-align: center;
+      font-size: clamp(1.05rem, 3vw, 1.3rem);
+      color: var(--muted);
+      margin: 0 auto 2.5rem;
+      max-width: 34ch;
+    }
+    .pitch {
+      font-size: 1.05rem;
+      color: var(--ink);
+    }
+    .pitch b { color: var(--gold-bright); font-weight: 600; }
+    code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    pre {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem;
+      overflow-x: auto;
+      font-size: .92rem;
+      line-height: 1.7;
+      color: var(--ink);
+    }
+    pre .c { color: var(--muted); }
+    pre .p { color: var(--gold); }
+    p code {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: .08em .4em;
+      font-size: .88em;
+      color: var(--gold-bright);
+    }
+    h2 {
+      font-size: .8rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--gold);
+      margin: 2.5rem 0 .75rem;
+    }
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75rem;
+      margin-top: 2.5rem;
+    }
+    .links a {
+      color: var(--blue);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: .5rem 1.1rem;
+      font-size: .95rem;
+      transition: border-color .15s, color .15s;
+    }
+    .links a:hover { border-color: var(--blue); color: var(--gold-bright); }
+    .note {
+      color: var(--muted);
+      font-size: .9rem;
+      margin-top: 1rem;
+    }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: .85rem;
+      padding: 2rem 1.5rem 2.5rem;
+      border-top: 1px solid var(--line);
+    }
+    footer a { color: var(--muted); }
+    a { color: var(--blue); }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="logo.svg" alt="apfelkäfig">
+    <h1>apfelkäfig</h1>
+    <p class="tag">Disposable dev sandboxes on Apple Silicon, safe to point coding agents at.</p>
+
+    <p class="pitch">
+      <code>akf up</code> boots your project inside an Apple <code>container</code> micro-VM with
+      Claude Code (or any CLI agent) running with <code>--dangerously-skip-permissions</code>.
+      <b>The VM is the sandbox</b>, so the permission prompts are redundant, not risky.
+    </p>
+
+    <h2>Try it</h2>
+    <pre><span class="c"># drive-by from any directory — no setup</span>
+akf up                         <span class="c"># interactive Claude in the built-in image</span>
+akf up bash                    <span class="c"># drop into a shell</span>
+akf clean                      <span class="c"># leave no trace</span></pre>
+    <p class="note">macOS on Apple Silicon · requires Apple <code>container</code> 1.0+ · pre-release (v0.2)</p>
+
+    <h2>Install from source</h2>
+    <pre><span class="p">git</span> clone https://github.com/schmidsi/apfelkaefig
+<span class="p">cd</span> apfelkaefig
+<span class="p">deno</span> task compile
+<span class="p">cp</span> dist/akf /usr/local/bin/akf</pre>
+    <p class="note">Homebrew and npm (<code>npx apfelkaefig init</code>) are on the way.</p>
+
+    <div class="links">
+      <a href="https://github.com/schmidsi/apfelkaefig">GitHub →</a>
+      <a href="https://github.com/schmidsi/apfelkaefig#readme">Docs</a>
+      <a href="/schema/v1.json">Config schema</a>
+    </div>
+  </main>
+
+  <footer>
+    Native to Apple Silicon — no Docker Desktop tax, no x86 emulation.
+    · <a href="https://github.com/schmidsi/apfelkaefig/blob/main/LICENSE">MIT</a>
+  </footer>
+</body>
+</html>

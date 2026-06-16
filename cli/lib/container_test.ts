@@ -117,6 +117,19 @@ Deno.test("buildRunArgs: commandOverride and userOverride replace command and us
   assert(out.args.includes("-i") && !out.args.includes("-it"), "expected -i without -it");
 });
 
+Deno.test("buildRunArgs: name emits a stable --name for teardown by name", () => {
+  const out = buildRunArgs({
+    resolved: resolved({}),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+    name: "akf-serve-proj-abc123",
+  });
+  const nIdx = out.args.indexOf("--name");
+  assert(nIdx !== -1, "expected --name flag");
+  assertEquals(out.args[nIdx + 1], "akf-serve-proj-abc123");
+});
+
 Deno.test("buildRunArgs: injects AKF_SANDBOX and AKF_PROJECT_NAME", () => {
   const out = buildRunArgs({
     resolved: resolved({}),

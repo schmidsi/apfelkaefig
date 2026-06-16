@@ -62,6 +62,11 @@ export interface RunFlagsInput {
   // Replace the resolved config's user (`-u`). `akf up --serve` runs as root so
   // sshd can bind :22 and authenticate the login as the agent user.
   userOverride?: string;
+  // Assign a stable container name (`--name`). `akf up --serve` sets this so it
+  // can clear an orphan on startup and tear the box down by name on Ctrl+C —
+  // Apple `container`'s interactive signal relay is unreliable, so we can't rely
+  // on forwarding SIGINT to `container run`.
+  name?: string;
 }
 
 // Compute the argv for `container run …` minus the leading `container run`.
@@ -76,6 +81,7 @@ export function buildRunArgs(
 
   const wantTty = input.tty ?? stdinIsTerminal();
   const args: string[] = ["run", "--rm", wantTty ? "-it" : "-i"];
+  if (input.name) args.push("--name", input.name);
   args.push("--cpus", String(e.resources.cpus), "--memory", e.resources.memory);
   for (const p of c.ports ?? []) {
     const proto = p.protocol ?? "tcp";

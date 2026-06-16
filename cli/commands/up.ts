@@ -12,8 +12,10 @@ import {
   realRunner,
   resolveImageRef,
   type Runner,
+  stopContainer,
 } from "../lib/container.ts";
 import { ConfigError, resolveConfig, substitute } from "../lib/config.ts";
+import { projectSlug } from "../lib/fs.ts";
 import { resolveOp, SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
 import { runBuild } from "./build.ts";
 
@@ -156,6 +158,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
   let commandOverride: string[] | undefined;
   let userOverride: string | undefined;
   let tty: boolean | undefined;
+  let serveName: string | undefined;
   if (opts.serve) {
     const ssh = resolved.config.plugins?.ssh;
     if (!ssh?.enabled) {
@@ -185,6 +188,12 @@ export async function runUp(opts: UpOptions): Promise<number> {
     commandOverride = [SSH_ENTRYPOINT];
     userOverride = "root";
     tty = false;
+    serveName = `akf-serve-${projectSlug(resolved.workspaceDir)}`;
+    // Clear an orphan from a previously force-killed --serve: Apple `container`
+    // drops the SIGINT relay and leaves the VM running, which then holds the
+    // host-key volume and bootstrapping a new box fails ("storage device
+    // attachment is invalid"). Best-effort — non-existent name is fine.
+    await run("container", ["rm", "-f", serveName], { stdout: "null", stderr: "piped" });
     console.error(
       `akf up: serving sshd — connect with:\n` +
         `         Host:     node@127.0.0.1\n` +
@@ -202,6 +211,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
     commandOverride,
     userOverride,
     tty,
+    name: serveName,
   });
 
   // Forward SIGINT so the container exits cleanly. Deno's child inherits the
@@ -214,6 +224,14 @@ export async function runUp(opts: UpOptions): Promise<number> {
   });
   const child = cmd.spawn();
   const onSig = () => {
+    if (serveName) {
+      // Non-TTY server: Apple `container`'s interactive signal relay drops the
+      // SIGINT ("missing signal in xpc message"), so forwarding to `container
+      // run` would leave the box running. Stop it by name from the host side
+      // instead — that ends the run, and `--rm` cleans up.
+      stopContainer(serveName, run).catch(() => {});
+      return;
+    }
     try {
       child.kill("SIGINT");
     } catch (_) {

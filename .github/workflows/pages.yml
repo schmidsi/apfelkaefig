@@ -1,0 +1,49 @@
+name: Pages
+
+# Publishes the landing page (site/) plus the canonical config schema
+# (schema/v1.json → /schema/v1.json) to GitHub Pages. The schema is copied in
+# at build time so apfelkaefig.com/schema/v1.json never drifts from the repo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "schema/v1.json"
+      - "assets/logo.svg"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; don't cancel an in-progress run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble _site
+        run: |
+          mkdir -p _site/schema
+          cp site/index.html _site/index.html
+          cp site/CNAME _site/CNAME
+          cp assets/logo.svg _site/logo.svg
+          cp schema/v1.json _site/schema/v1.json
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
