@@ -1,7 +1,29 @@
 {
   "$schema": "https://apfelkaefig.com/schema/v1.json",
   "version": 1,
-  // Extends the embedded base with Deno so the sandbox can run the akf
-  // toolchain itself (deno task test / fmt / compile).
-  "image": { "dockerfile": ".devcontainer/Dockerfile" }
+  "image": {
+    "dockerfile": ".devcontainer/Dockerfile"
+  },
+  "plugins": {
+    "ssh": {
+      "enabled": true,
+      "authorizedKey": "${localEnv:HOME}/.ssh/id_ed25519.pub",
+      "port": 2222
+    }
+  },
+  "mounts": [
+    {
+      "type": "volume",
+      "source": "ssh-apfelkaefig-hostkey",
+      "target": "/var/lib/akf-ssh"
+    }
+  ],
+  "ports": [
+    {
+      "hostIp": "127.0.0.1",
+      "host": 2222,
+      "container": 22,
+      "protocol": "tcp"
+    }
+  ]
 }

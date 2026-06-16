@@ -60,3 +60,27 @@ Configured via `.apfelkaefig.json` at the repo root. The sandbox mounts this fol
 read-only.
 
 <!-- akf:end -->
+
+<!-- akf plugin: ssh start -->
+## SSH access to the sandbox
+
+This project enables the akf `ssh` plugin. Run:
+
+```bash
+akf up --serve --rebuild   # first run after enabling/changing the plugin
+akf up --serve             # subsequent runs
+```
+
+The first `--serve` after adding or changing this plugin needs `--rebuild`
+(or a prior `akf build`): the sshd entrypoint is baked into the image at build
+time, and `akf up` reuses the cached image otherwise — without the rebuild you
+get `failed to find target executable /usr/local/bin/akf-sshd`.
+
+That starts sshd inside the sandbox in the foreground (Ctrl+C stops it) and
+prints the connection details. In the desktop app's "Add SSH connection" use
+the printed Host / Port / Identity — the app runs the agent inside this box
+over SSH.
+
+Reachability is local-only: the port is published on `127.0.0.1`, and the
+host key persists across runs so reconnects don't trip `known_hosts`.
+<!-- akf plugin: ssh end -->

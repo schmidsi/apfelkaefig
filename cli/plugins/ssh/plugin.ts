@@ -133,14 +133,17 @@ export const sshPlugin: BuiltInPlugin = {
   setupSteps(_raw) {
     return [
       {
-        command: "akf up --serve",
-        description: "start the SSH-reachable sandbox (Ctrl+C to stop)",
+        command: "akf up --serve --rebuild",
+        description: "rebuild the image (bakes in sshd) + start the sandbox (Ctrl+C to stop)",
       },
     ];
   },
   postApplyMessages(raw) {
     const config = raw as unknown as SshConfig;
     return [
+      `First run after adding/changing this plugin needs '--rebuild' (or 'akf build'): the`,
+      `sshd entrypoint is baked into the image at build time, and 'akf up' reuses the cached`,
+      `image otherwise — you'd get "failed to find target executable /usr/local/bin/akf-sshd".`,
       `Reachable over SSH while \`akf up --serve\` is running (foreground; Ctrl+C stops it).`,
       `In the app's "Add SSH connection": Host ${NODE_USER}@127.0.0.1, Port ${config.port}, ` +
       `Identity the private key matching '${config.authorizedKey}'.`,
@@ -253,8 +256,14 @@ const SSH_GUIDANCE = `## SSH access to the sandbox
 This project enables the akf \`ssh\` plugin. Run:
 
 \`\`\`bash
-akf up --serve
+akf up --serve --rebuild   # first run after enabling/changing the plugin
+akf up --serve             # subsequent runs
 \`\`\`
+
+The first \`--serve\` after adding or changing this plugin needs \`--rebuild\`
+(or a prior \`akf build\`): the sshd entrypoint is baked into the image at build
+time, and \`akf up\` reuses the cached image otherwise — without the rebuild you
+get \`failed to find target executable /usr/local/bin/akf-sshd\`.
 
 That starts sshd inside the sandbox in the foreground (Ctrl+C stops it) and
 prints the connection details. In the desktop app's "Add SSH connection" use
