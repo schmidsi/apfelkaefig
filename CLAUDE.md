@@ -83,4 +83,24 @@ over SSH.
 
 Reachability is local-only: the port is published on `127.0.0.1`, and the
 host key persists across runs so reconnects don't trip `known_hosts`.
+
+### Troubleshooting the desktop attach
+
+- **"Failed to connect to agent"** — your SSH keys are served by the **1Password
+  SSH agent**, which stops responding ("connection refused") whenever 1Password
+  is locked or closed. The desktop app surfaces that as this error. Fix: open and
+  unlock 1Password, then "Try again". (Lengthen Settings → Security → auto-lock if
+  it keeps happening.)
+- **"All configured authentication methods failed"** — the key the app offers
+  isn't in the sandbox's `authorized_keys`. `authorizedKey` must point at a file
+  holding the public key the app's agent serves (here: the 1Password keys in the
+  gitignored `.devcontainer/authorized_keys.pub`).
+- **"Failed to start remote server" / "claude-ssh: timeout"** — `claude` not on
+  the non-interactive PATH; the entrypoint symlinks it into `/usr/local/bin`.
+- **"chmod socket: invalid argument"** (in `~/.claude/remote/run/<id>/remote-server.log`)
+  — `~/.claude/remote` landed on virtiofs (the host mount), which rejects chmod on
+  socket inodes. A native named volume shadows that subdir to fix it.
+
+Diagnose from the host with `container logs akf-serve-<projectSlug>` (sshd auth)
+and, inside the box, `~/.claude/remote/run/<id>/remote-server.log` (daemon).
 <!-- akf plugin: ssh end -->
