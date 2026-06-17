@@ -30,7 +30,7 @@
           "properties": {
             "dockerfile": {
               "type": "string",
-              "description": "Path to a Dockerfile relative to the project root (e.g. \".devcontainer/Dockerfile\"). Requires Docker on the host."
+              "description": "Path to a Dockerfile relative to the project root (e.g. \".devcontainer/Dockerfile\"). Built with Apple `container build` (no Docker needed)."
             }
           }
         }
