@@ -275,6 +275,9 @@ function renderDockerfile(): string {
     `    '  chown ${NODE_USER}:${NODE_USER} /home/${NODE_USER}/.ssh/authorized_keys' \\`,
     `    '  chmod 600 /home/${NODE_USER}/.ssh/authorized_keys' \\`,
     `    'fi' \\`,
+    `    '# The ${REMOTE_DIR} volume mounts root-owned; chown it so ${NODE_USER} can write.' \\`,
+    `    '# Desktop apps SFTP the remote server in there, else "Failed to upload file".' \\`,
+    `    'chown ${NODE_USER}:${NODE_USER} ${REMOTE_DIR}' \\`,
     `    '# Make claude reachable on the non-interactive PATH. sshd resets the' \\`,
     `    '# environment and ignores the image ENV PATH, so a bare \`ssh host claude\`' \\`,
     `    '# (how desktop apps launch the remote server) cannot find ~/.local/bin/claude.' \\`,
@@ -319,6 +322,9 @@ host key persists across runs so reconnects don't trip \`known_hosts\`.
   gitignored \`.devcontainer/authorized_keys.pub\`).
 - **"Failed to start remote server" / "claude-ssh: timeout"** — \`claude\` not on
   the non-interactive PATH; the entrypoint symlinks it into \`/usr/local/bin\`.
+- **"Failed to upload file: No such file"** — the \`~/.claude/remote\` named volume
+  mounts root-owned, so \`node\` can't SFTP the remote server into it. The entrypoint
+  \`chown\`s it to \`node\`; if you see this, the rebuild didn't pick up that fix.
 - **"chmod socket: invalid argument"** (in \`~/.claude/remote/run/<id>/remote-server.log\`)
   — \`~/.claude/remote\` landed on virtiofs (the host mount), which rejects chmod on
   socket inodes. A native named volume shadows that subdir to fix it.

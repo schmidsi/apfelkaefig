@@ -89,6 +89,12 @@ Deno.test("ssh dockerfileBlocks: installs sshd and the foreground entrypoint", (
     b.contents.includes("ln -sf /home/node/.local/bin/claude /usr/local/bin/claude"),
     "claude not symlinked onto the non-interactive PATH",
   );
+  // The ~/.claude/remote volume mounts root-owned; node must own it to SFTP the
+  // remote server in (else "Failed to upload file").
+  assert(
+    b.contents.includes("chown node:node /home/node/.claude/remote"),
+    "remote volume not chowned to node",
+  );
 });
 
 Deno.test("ssh resolveKeyPath: resolves ${localWorkspaceFolder}", () => {

@@ -61,6 +61,7 @@ read-only.
 
 <!-- akf:end -->
 
+
 <!-- akf plugin: ssh start -->
 ## SSH access to the sandbox
 
@@ -97,6 +98,9 @@ host key persists across runs so reconnects don't trip `known_hosts`.
   gitignored `.devcontainer/authorized_keys.pub`).
 - **"Failed to start remote server" / "claude-ssh: timeout"** — `claude` not on
   the non-interactive PATH; the entrypoint symlinks it into `/usr/local/bin`.
+- **"Failed to upload file: No such file"** — the `~/.claude/remote` named volume
+  mounts root-owned, so `node` can't SFTP the remote server into it. The entrypoint
+  `chown`s it to `node`; if you see this, the rebuild didn't pick up that fix.
 - **"chmod socket: invalid argument"** (in `~/.claude/remote/run/<id>/remote-server.log`)
   — `~/.claude/remote` landed on virtiofs (the host mount), which rejects chmod on
   socket inodes. A native named volume shadows that subdir to fix it.

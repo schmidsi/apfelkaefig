@@ -18,6 +18,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 USER node
 
+
 # >>> akf plugin: ssh
 # Root for the install/config steps below: this block may be appended after a
 # Dockerfile that ended as a non-root user (e.g. a project Dockerfile ending
@@ -59,6 +60,9 @@ RUN printf '%s\n' \
     '  chown node:node /home/node/.ssh/authorized_keys' \
     '  chmod 600 /home/node/.ssh/authorized_keys' \
     'fi' \
+    '# The /home/node/.claude/remote volume mounts root-owned; chown it so node can write.' \
+    '# Desktop apps SFTP the remote server in there, else "Failed to upload file".' \
+    'chown node:node /home/node/.claude/remote' \
     '# Make claude reachable on the non-interactive PATH. sshd resets the' \
     '# environment and ignores the image ENV PATH, so a bare `ssh host claude`' \
     '# (how desktop apps launch the remote server) cannot find ~/.local/bin/claude.' \
