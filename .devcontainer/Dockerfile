@@ -18,7 +18,6 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 USER node
 
-
 # >>> akf plugin: ssh
 # Root for the install/config steps below: this block may be appended after a
 # Dockerfile that ended as a non-root user (e.g. a project Dockerfile ending
