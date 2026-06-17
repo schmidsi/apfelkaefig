@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { sshPlugin } from "./plugin.ts";
+import { resolveKeyPath, sshPlugin } from "./plugin.ts";
 import type { ApfelkaefigConfig } from "../../lib/schema.ts";
 
 const ctx = { workspaceDir: "/Users/me/myproj" };
@@ -25,6 +25,16 @@ Deno.test("ssh applyConfig: adds host-key volume, published port, and dockerfile
   assert(port, "published port missing");
   assertEquals(port.hostIp, "127.0.0.1");
   assertEquals(port.host, 2222);
+});
+
+Deno.test("ssh applyConfig: shadows ~/.claude/remote with a native volume", () => {
+  // The desktop remote server chmod()s its rpc.sock; virtiofs (the ~/.claude
+  // host mount) rejects that, so this subdir needs a native (ext4) volume.
+  const out = sshPlugin.applyConfig({ version: 1 }, defaults(), ctx);
+  const vol = (out.mounts ?? []).find((m) => m.target === "/home/node/.claude/remote");
+  assert(vol, "remote volume mount missing");
+  assertEquals(vol.type, "volume");
+  assertEquals(vol.source, "ssh-myproj-remote");
 });
 
 Deno.test("ssh applyConfig: hostKeyVolume override wins", () => {
@@ -72,6 +82,20 @@ Deno.test("ssh dockerfileBlocks: installs sshd and the foreground entrypoint", (
   // The passwordless 'node' account is locked ('!') by default; with UsePAM no
   // sshd refuses locked accounts, so the entrypoint must unlock it.
   assert(b.contents.includes("passwd -d node"), "node account not unlocked");
+  // sshd resets PATH for non-interactive sessions, so `ssh host claude` (how
+  // desktop apps launch the remote server) can't find ~/.local/bin/claude
+  // without a symlink onto the default PATH.
+  assert(
+    b.contents.includes("ln -sf /home/node/.local/bin/claude /usr/local/bin/claude"),
+    "claude not symlinked onto the non-interactive PATH",
+  );
+});
+
+Deno.test("ssh resolveKeyPath: resolves ${localWorkspaceFolder}", () => {
+  assertEquals(
+    resolveKeyPath("${localWorkspaceFolder}/.devcontainer/authorized_keys.pub", "/ws/proj"),
+    "/ws/proj/.devcontainer/authorized_keys.pub",
+  );
 });
 
 Deno.test("ssh validateConfig: rejects unknown keys and bad port", () => {

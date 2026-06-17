@@ -7,7 +7,7 @@
   "plugins": {
     "ssh": {
       "enabled": true,
-      "authorizedKey": "${localEnv:HOME}/.ssh/id_ed25519.pub",
+      "authorizedKey": "${localWorkspaceFolder}/.devcontainer/authorized_keys.pub",
       "port": 2222
     }
   },
@@ -16,6 +16,11 @@
       "type": "volume",
       "source": "ssh-apfelkaefig-hostkey",
       "target": "/var/lib/akf-ssh"
+    },
+    {
+      "type": "volume",
+      "source": "ssh-apfelkaefig-remote",
+      "target": "/home/node/.claude/remote"
     }
   ],
   "ports": [

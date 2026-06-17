@@ -6,6 +6,9 @@ node_modules/
 *.log
 dist/akf
 
+# Local SSH authorized keys for the akf ssh plugin — machine-local, never published.
+.devcontainer/authorized_keys.pub
+
 # >>> akf >>>
 .akf/
 # <<< akf <<<

@@ -59,6 +59,10 @@ RUN printf '%s\n' \
     '  chown node:node /home/node/.ssh/authorized_keys' \
     '  chmod 600 /home/node/.ssh/authorized_keys' \
     'fi' \
+    '# Make claude reachable on the non-interactive PATH. sshd resets the' \
+    '# environment and ignores the image ENV PATH, so a bare `ssh host claude`' \
+    '# (how desktop apps launch the remote server) cannot find ~/.local/bin/claude.' \
+    'ln -sf /home/node/.local/bin/claude /usr/local/bin/claude' \
     'exec /usr/sbin/sshd -D -e' \
     > /usr/local/bin/akf-sshd && chmod +x /usr/local/bin/akf-sshd
 # <<< akf plugin: ssh

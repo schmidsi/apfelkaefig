@@ -31,8 +31,13 @@ const DEFAULT_KEY = "${localEnv:HOME}/.ssh/id_ed25519.pub";
 const DEFAULT_PORT = 2222;
 const HOST_KEY_DIR = "/var/lib/akf-ssh";
 const HOST_KEY = `${HOST_KEY_DIR}/ssh_host_ed25519_key`;
-const ENTRYPOINT = "/usr/local/bin/akf-sshd";
 const NODE_USER = "node";
+// Desktop apps run their remote server out of ~/.claude/remote and chmod() its
+// rpc.sock. ~/.claude is a virtiofs host mount, which rejects chmod on socket
+// inodes (EINVAL) — so the daemon dies on startup. Shadowing just this subdir
+// with a native (ext4) named volume keeps the socket off virtiofs.
+const REMOTE_DIR = `/home/${NODE_USER}/.claude/remote`;
+const ENTRYPOINT = "/usr/local/bin/akf-sshd";
 
 interface SshConfig {
   enabled: boolean;
@@ -88,6 +93,17 @@ export const sshPlugin: BuiltInPlugin = {
       const vol: MountConfig = { type: "volume", source: hostKeyVol, target: HOST_KEY_DIR };
       mounts.push(vol);
     }
+    // Native fs over ~/.claude/remote so the desktop remote server's rpc.sock
+    // can be chmod()'d (virtiofs rejects it). Nested inside the ~/.claude host
+    // mount — Apple `container` layers the child volume on top correctly.
+    if (!mounts.some((m) => m.target === REMOTE_DIR)) {
+      const vol: MountConfig = {
+        type: "volume",
+        source: `ssh-${projectSlug(ctx.workspaceDir)}-remote`,
+        target: REMOTE_DIR,
+      };
+      mounts.push(vol);
+    }
 
     const ports = [...(base.ports ?? [])];
     if (
@@ -127,7 +143,7 @@ export const sshPlugin: BuiltInPlugin = {
     const config = raw as unknown as SshConfig;
     const checks: PluginDoctorCheck[] = [];
     checks.push(await dockerfileBlockCheck(resolved));
-    checks.push(await authorizedKeyCheck(config));
+    checks.push(await authorizedKeyCheck(config, resolved.workspaceDir));
     return checks;
   },
   setupSteps(_raw) {
@@ -179,8 +195,11 @@ async function dockerfileBlockCheck(resolved: PluginDoctorContext): Promise<Plug
   };
 }
 
-async function authorizedKeyCheck(config: SshConfig): Promise<PluginDoctorCheck> {
-  const path = resolveKeyPath(config.authorizedKey);
+async function authorizedKeyCheck(
+  config: SshConfig,
+  workspaceDir: string,
+): Promise<PluginDoctorCheck> {
+  const path = resolveKeyPath(config.authorizedKey, workspaceDir);
   const text = await readTextIfPresent(path);
   if (text === null) {
     return {
@@ -199,12 +218,13 @@ async function authorizedKeyCheck(config: SshConfig): Promise<PluginDoctorCheck>
   return { label: "ssh key", severity: "ok", detail: `authorized key ${path}` };
 }
 
-// Resolve ${localEnv:HOME} / ~ in the configured key path for the doctor's
-// host-side existence check. The run path uses config.ts `substitute`, but
-// doctor only needs HOME and ~ which is all the configured default uses.
-export function resolveKeyPath(raw: string): string {
+// Resolve ${localEnv:HOME} / ${localWorkspaceFolder} / ~ in the configured key
+// path for the doctor's host-side existence check. Mirrors the tokens config.ts
+// `substitute` handles on the run path, so doctor agrees with what `akf up` reads.
+export function resolveKeyPath(raw: string, workspaceDir = ""): string {
   const home = Deno.env.get("HOME") ?? "";
   let p = raw.replace(/\$\{localEnv:HOME\}/g, home);
+  p = p.replaceAll("${localWorkspaceFolder}", workspaceDir);
   if (p.startsWith("~/")) p = `${home}/${p.slice(2)}`;
   return p;
 }
@@ -255,6 +275,10 @@ function renderDockerfile(): string {
     `    '  chown ${NODE_USER}:${NODE_USER} /home/${NODE_USER}/.ssh/authorized_keys' \\`,
     `    '  chmod 600 /home/${NODE_USER}/.ssh/authorized_keys' \\`,
     `    'fi' \\`,
+    `    '# Make claude reachable on the non-interactive PATH. sshd resets the' \\`,
+    `    '# environment and ignores the image ENV PATH, so a bare \`ssh host claude\`' \\`,
+    `    '# (how desktop apps launch the remote server) cannot find ~/.local/bin/claude.' \\`,
+    `    'ln -sf /home/${NODE_USER}/.local/bin/claude /usr/local/bin/claude' \\`,
     `    'exec /usr/sbin/sshd -D -e' \\`,
     `    > ${ENTRYPOINT} && chmod +x ${ENTRYPOINT}`,
   ].join("\n");
