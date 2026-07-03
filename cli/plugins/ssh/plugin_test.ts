@@ -10,9 +10,9 @@ function defaults(): Record<string, unknown> {
     : { ...sshPlugin.defaultConfig };
 }
 
-Deno.test("ssh applyConfig: adds host-key volume, published port, and dockerfile", () => {
+Deno.test("ssh transformConfig: adds host-key volume, published port, and dockerfile", () => {
   const base: ApfelkaefigConfig = { version: 1 };
-  const out = sshPlugin.applyConfig(base, defaults(), ctx);
+  const out = sshPlugin.transformConfig!(base, defaults(), ctx);
 
   assertEquals(out.image, { dockerfile: ".devcontainer/Dockerfile" });
 
@@ -27,18 +27,18 @@ Deno.test("ssh applyConfig: adds host-key volume, published port, and dockerfile
   assertEquals(port.host, 2222);
 });
 
-Deno.test("ssh applyConfig: shadows ~/.claude/remote with a native volume", () => {
+Deno.test("ssh transformConfig: shadows ~/.claude/remote with a native volume", () => {
   // The desktop remote server chmod()s its rpc.sock; virtiofs (the ~/.claude
   // host mount) rejects that, so this subdir needs a native (ext4) volume.
-  const out = sshPlugin.applyConfig({ version: 1 }, defaults(), ctx);
+  const out = sshPlugin.transformConfig!({ version: 1 }, defaults(), ctx);
   const vol = (out.mounts ?? []).find((m) => m.target === "/home/node/.claude/remote");
   assert(vol, "remote volume mount missing");
   assertEquals(vol.type, "volume");
   assertEquals(vol.source, "ssh-myproj-remote");
 });
 
-Deno.test("ssh applyConfig: hostKeyVolume override wins", () => {
-  const out = sshPlugin.applyConfig(
+Deno.test("ssh transformConfig: hostKeyVolume override wins", () => {
+  const out = sshPlugin.transformConfig!(
     { version: 1 },
     { ...defaults(), hostKeyVolume: "my-vol" },
     ctx,
@@ -47,9 +47,9 @@ Deno.test("ssh applyConfig: hostKeyVolume override wins", () => {
   assertEquals(vol?.source, "my-vol");
 });
 
-Deno.test("ssh applyConfig: idempotent — no duplicate mounts or ports", () => {
-  const once = sshPlugin.applyConfig({ version: 1 }, defaults(), ctx);
-  const twice = sshPlugin.applyConfig(once, defaults(), ctx);
+Deno.test("ssh transformConfig: idempotent — no duplicate mounts or ports", () => {
+  const once = sshPlugin.transformConfig!({ version: 1 }, defaults(), ctx);
+  const twice = sshPlugin.transformConfig!(once, defaults(), ctx);
   assertEquals(
     (twice.mounts ?? []).filter((m) => m.target === "/var/lib/akf-ssh").length,
     1,
@@ -57,9 +57,9 @@ Deno.test("ssh applyConfig: idempotent — no duplicate mounts or ports", () => 
   assertEquals((twice.ports ?? []).filter((p) => p.container === 22).length, 1);
 });
 
-Deno.test("ssh applyConfig: disabled is a no-op", () => {
+Deno.test("ssh transformConfig: disabled is a no-op", () => {
   const base: ApfelkaefigConfig = { version: 1 };
-  const out = sshPlugin.applyConfig(base, { ...defaults(), enabled: false }, ctx);
+  const out = sshPlugin.transformConfig!(base, { ...defaults(), enabled: false }, ctx);
   assertEquals(out, base);
 });
 

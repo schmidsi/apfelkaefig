@@ -43,6 +43,17 @@ export function projectSlug(workspaceHostPath: string): string {
   return trimmed || "akf";
 }
 
+// Non-crypto stable hash of a string, 8 hex chars. Disambiguates derived names
+// (volumes, container names) across same-basename projects; the worst case of
+// a collision is two paths sharing a resource, not data loss.
+export function djb2Hex(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
 export async function readTextIfPresent(path: string): Promise<string | null> {
   try {
     return await Deno.readTextFile(path);

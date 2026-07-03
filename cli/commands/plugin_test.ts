@@ -13,7 +13,8 @@ Deno.test("plugin add 1password creates config and marker block", async () => {
 
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins["1password"], { enabled: true });
-    assertEquals(config.secrets.onepassword, true);
+    // Config effects (secrets) resolve at runtime, never materialized (tasks/011).
+    assertEquals(config.secrets, undefined);
 
     const claude = await Deno.readTextFile(join(dir, "CLAUDE.md"));
     assert(claude.includes("<!-- akf plugin: 1password start -->"));
@@ -80,15 +81,10 @@ Deno.test("plugin add crit creates config, Dockerfile block, and guidance", asyn
 
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins.crit.version, "v0.13.0");
-    assertEquals(config.image, { dockerfile: ".devcontainer/Dockerfile" });
-    assertEquals(config.env.CRIT_HOST, "0.0.0.0");
-    assertEquals(config.env.CRIT_PORT, "3247");
-    assertEquals(config.ports, [{
-      hostIp: "127.0.0.1",
-      host: 3247,
-      container: 3247,
-      protocol: "tcp",
-    }]);
+    // Image/env/ports resolve at runtime from the plugins section (tasks/011).
+    assertEquals(config.image, undefined);
+    assertEquals(config.env, undefined);
+    assertEquals(config.ports, undefined);
 
     const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
     assert(dockerfile.includes("# >>> akf plugin: crit"));
@@ -132,7 +128,7 @@ Deno.test("init --plugins 1password writes plugin config", async () => {
     await runInit({ cwd: dir, plugins: ["1password"] });
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins["1password"].enabled, true);
-    assertEquals(config.secrets.onepassword, true);
+    assertEquals(config.secrets, undefined);
   });
 });
 
@@ -141,7 +137,7 @@ Deno.test("init --plugins crit writes plugin config", async () => {
     await runInit({ cwd: dir, plugins: ["crit"] });
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins.crit.enabled, true);
-    assertEquals(config.ports[0].host, 3247);
+    assertEquals(config.plugins.crit.port, 3247);
   });
 });
 
@@ -154,10 +150,9 @@ Deno.test("plugin add telegram writes config, Dockerfile block, and volume mount
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins.telegram.enabled, true);
     assertEquals(config.plugins.telegram.storage, "instance");
-    assertEquals(config.image, { dockerfile: ".devcontainer/Dockerfile" });
-    assertEquals(config.mounts.length, 2);
-    assertEquals(config.mounts[0].type, "volume");
-    assertEquals(config.mounts[0].target, "/home/node/.config/telegram-cli");
+    // Mounts and image resolve at runtime from the plugins section (tasks/011).
+    assertEquals(config.image, undefined);
+    assertEquals(config.mounts, undefined);
 
     const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
     assert(dockerfile.includes("# >>> akf plugin: telegram"));
@@ -212,6 +207,6 @@ Deno.test("plugin add telegram with userIsolation renders sudo wrapper block", a
     assert(dockerfile.includes("sudo -u telegram"));
     assert(dockerfile.includes("/etc/sudoers.d/akf-telegram"));
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
-    assertEquals(config.mounts[0].target, "/home/telegram/.config/telegram-cli");
+    assertEquals(config.mounts, undefined);
   });
 });

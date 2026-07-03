@@ -70,7 +70,7 @@ export const critPlugin: BuiltInPlugin = {
     version: "v0.13.0",
     port: 3247,
   },
-  applyConfig(base, config, _ctx) {
+  transformConfig(base, config, _ctx) {
     if (!config.enabled) return base;
     const port = typeof config.port === "number" ? config.port : 3247;
     const ports = [...(base.ports ?? [])];

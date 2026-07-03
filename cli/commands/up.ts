@@ -4,9 +4,7 @@
 import { isAbsolute, join } from "@std/path";
 import { builtInImage, materializeEmbeddedDockerfile, sandboxStamp } from "../lib/baseimage.ts";
 import {
-  buildExecArgs,
   buildRunArgs,
-  containerIsRunning,
   containerVersion,
   ensureContainerSystem,
   ensureVolumes,
@@ -17,7 +15,6 @@ import {
   realRunner,
   resolveImageRef,
   type Runner,
-  sandboxContainerName,
   stopContainer,
 } from "../lib/container.ts";
 import {
@@ -28,8 +25,9 @@ import {
   runAuthWizard,
 } from "../lib/claude_creds.ts";
 import { ConfigError, effective, resolveConfig, substitute } from "../lib/config.ts";
-import { projectSlug } from "../lib/fs.ts";
-import { TMUX_SESSION } from "../lib/schema.ts";
+import { djb2Hex, projectSlug } from "../lib/fs.ts";
+import { type BuiltInPlugin, getPlugin, type PluginId, type RunContext } from "../lib/plugins.ts";
+import { tmuxPlugin } from "../plugins/tmux/plugin.ts";
 import { resolveOp, SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
 import { runBuild } from "./build.ts";
 
@@ -89,27 +87,45 @@ export async function runUp(opts: UpOptions): Promise<number> {
   // Ensure the container system is up before we query running containers or run.
   await ensureContainerSystem(run);
 
-  // tmux multiplexing: when enabled, a second `akf up` from another terminal
-  // should attach to the same running container rather than starting a new one.
-  // (--serve runs sshd, not the agent, so it opts out.)
+  // Run-hook plugins (tasks/011): every enabled config plugin participates,
+  // plus the internal tmux plugin when the top-level `tmux` key or the --tmux
+  // flag enables it. (--serve replaces the command wholesale, so it opts out
+  // of tmux.)
   const eff = effective(resolved);
   const tmuxEnabled = (opts.tmux ?? eff.tmux) && !opts.serve;
-  let sandboxName: string | undefined;
-  if (tmuxEnabled) {
-    sandboxName = sandboxContainerName(resolved.workspaceDir);
-    if (await containerIsRunning(sandboxName, run)) {
-      console.error(
-        `akf up: attaching to running sandbox '${sandboxName}' ` +
-          `(tmux session '${TMUX_SESSION}'; Ctrl+B c for a new window, Ctrl+B d to detach)…`,
-      );
-      const command = opts.positional.length > 0 ? opts.positional : eff.command;
-      const execArgs = buildExecArgs(sandboxName, command);
-      debugCmd(execArgs);
-      return await spawnInteractive(execArgs);
+  const runtimePlugins: BuiltInPlugin[] = Object.entries(resolved.config.plugins ?? {})
+    .filter(([, pc]) => pc?.enabled)
+    .map(([id]) => getPlugin(id as PluginId));
+  if (tmuxEnabled) runtimePlugins.push(tmuxPlugin);
+
+  const runCtx: RunContext = {
+    config: resolved.config,
+    workspaceDir: resolved.workspaceDir,
+    command: eff.command,
+    flags: { tmux: opts.tmux === true, serve: opts.serve === true },
+    run,
+  };
+
+  // containerName is exclusive — two claimants is a plugin-author error.
+  const nameClaims = runtimePlugins.filter((p) => p.containerName !== undefined);
+  if (nameClaims.length > 1) {
+    console.error(
+      `akf up: plugins ${nameClaims.map((p) => `'${p.id}'`).join(" and ")} ` +
+        `both claim the container name`,
+    );
+    return 1;
+  }
+  const sandboxName = nameClaims[0]?.containerName?.(runCtx);
+
+  // preRun in config order: validation, attach-vs-run branches, orphan cleanup.
+  for (const plugin of runtimePlugins) {
+    if (!plugin.preRun) continue;
+    const result = await plugin.preRun(runCtx);
+    if (result.action === "exit") return result.code;
+    if (result.action === "attach") {
+      debugCmd(result.args);
+      return await spawnInteractive(result.args);
     }
-    // Clear a stopped orphan of the same name so `container run --name` below
-    // doesn't collide. Safe: only reached when it isn't running.
-    await run("container", ["rm", "-f", sandboxName], { stdout: "null", stderr: "piped" });
   }
 
   // Ensure the sandbox's own Claude login (see cli/lib/claude_creds.ts) before
@@ -288,7 +304,9 @@ export async function runUp(opts: UpOptions): Promise<number> {
     commandOverride = [SSH_ENTRYPOINT];
     userOverride = "root";
     tty = false;
-    serveName = `akf-serve-${projectSlug(resolved.workspaceDir)}`;
+    // Path hash for the same reason as the tmux sandbox name: two projects
+    // sharing a basename must not tear down each other's serve box.
+    serveName = `akf-serve-${projectSlug(resolved.workspaceDir)}-${djb2Hex(resolved.workspaceDir)}`;
     // Clear an orphan from a previously force-killed --serve: Apple `container`
     // drops the SIGINT relay and leaves the VM running, which then holds the
     // host-key volume and bootstrapping a new box fails ("storage device
@@ -328,6 +346,16 @@ export async function runUp(opts: UpOptions): Promise<number> {
       );
       return 1;
     }
+  }
+
+  // Let run-hook plugins wrap the agent command (tmux session, …), unless a
+  // command override (--serve's sshd entrypoint) replaces it wholesale.
+  if (commandOverride === undefined) {
+    let command = eff.command;
+    for (const plugin of runtimePlugins) {
+      if (plugin.wrapCommand) command = plugin.wrapCommand(command, runCtx);
+    }
+    if (command !== eff.command) commandOverride = command;
   }
 
   const built = buildRunArgs({

@@ -82,7 +82,7 @@ export const sshPlugin: BuiltInPlugin = {
     authorizedKey: DEFAULT_KEY,
     port: DEFAULT_PORT,
   },
-  applyConfig(base, raw, ctx) {
+  transformConfig(base, raw, ctx) {
     const config = raw as unknown as SshConfig;
     if (!config.enabled) return base;
 

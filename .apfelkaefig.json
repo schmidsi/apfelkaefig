@@ -11,25 +11,5 @@
       "authorizedKey": "${localWorkspaceFolder}/.devcontainer/authorized_keys.pub",
       "port": 2222
     }
-  },
-  "mounts": [
-    {
-      "type": "volume",
-      "source": "ssh-apfelkaefig-hostkey",
-      "target": "/var/lib/akf-ssh"
-    },
-    {
-      "type": "volume",
-      "source": "ssh-apfelkaefig-remote",
-      "target": "/home/node/.claude/remote"
-    }
-  ],
-  "ports": [
-    {
-      "hostIp": "127.0.0.1",
-      "host": 2222,
-      "container": 22,
-      "protocol": "tcp"
-    }
-  ]
+  }
 }

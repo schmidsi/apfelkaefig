@@ -21,7 +21,7 @@ export const onePasswordPlugin: BuiltInPlugin = {
     }
   },
   defaultConfig: { enabled: true },
-  applyConfig(base, config, _ctx) {
+  transformConfig(base, config, _ctx) {
     if (!config.enabled) return base;
     return {
       ...base,

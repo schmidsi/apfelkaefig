@@ -15,7 +15,7 @@
 // `sudo -u telegram`, so claude-running-as-node can invoke telegram but
 // cannot read the session DB directly. Incompatible with storage=host.
 
-import { projectSlug, readTextIfPresent } from "../../lib/fs.ts";
+import { djb2Hex, projectSlug, readTextIfPresent } from "../../lib/fs.ts";
 import type {
   BuiltInPlugin,
   PluginContext,
@@ -104,7 +104,7 @@ export const telegramPlugin: BuiltInPlugin = {
       userIsolation: false,
     };
   },
-  applyConfig(base, raw, ctx) {
+  transformConfig(base, raw, ctx) {
     const config = raw as unknown as TelegramConfig;
     if (!config.enabled) return base;
 
@@ -225,17 +225,6 @@ function volumeNames(
     configVol: `tg-${stem}-${hash}-config`,
     stateVol: `tg-${stem}-${hash}-state`,
   };
-}
-
-// Non-crypto stable hash. 8 hex chars is enough to disambiguate a handful
-// of clones on one host; collision risk is tiny and the worst case (two
-// paths share a volume) is a re-auth, not data loss.
-function djb2Hex(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
 }
 
 function renderMarker(config: TelegramConfig): string {

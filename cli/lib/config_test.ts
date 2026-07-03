@@ -639,3 +639,57 @@ Deno.test("effective splits string command on whitespace", () => {
   // behavior; users who need quoted args should use the array form.
   assertEquals(e.command, ["bash", "-lc", "'echo", "hi'"]);
 });
+
+Deno.test("resolveConfig: applies plugin transforms at resolve time", async () => {
+  await withTmpDir(async (dir) => {
+    // Only the plugins section lives in the file (tasks/011); the effects
+    // (secrets, image, env, ports) must appear in the resolved config.
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        plugins: {
+          "1password": { enabled: true },
+          crit: {
+            enabled: true,
+            agentIntegration: "claude-code",
+            installMethod: "pinned-release",
+            version: "v0.13.0",
+            port: 3247,
+          },
+        },
+      }),
+    );
+    const r = await resolveConfig({ cwd: dir });
+    assertEquals(r.config.secrets?.onepassword, true);
+    assertEquals(r.config.image, { dockerfile: ".devcontainer/Dockerfile" });
+    assertEquals(r.config.env?.CRIT_PORT, "3247");
+    assertEquals(r.config.ports?.[0].host, 3247);
+    // The file itself stays untouched by resolution.
+    const onDisk = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
+    assertEquals(onDisk.secrets, undefined);
+    assertEquals(onDisk.image, undefined);
+  });
+});
+
+Deno.test("resolveConfig: CLI image override beats plugin transforms", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({
+        version: 1,
+        plugins: {
+          crit: {
+            enabled: true,
+            agentIntegration: "claude-code",
+            installMethod: "pinned-release",
+            version: "v0.13.0",
+            port: 3247,
+          },
+        },
+      }),
+    );
+    const r = await resolveConfig({ cwd: dir, cliOverrides: { image: "node:22" } });
+    assertEquals(r.config.image, "node:22");
+  });
+});

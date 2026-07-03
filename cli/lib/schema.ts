@@ -110,10 +110,6 @@ export const DEFAULTS = {
   tmux: false,
 } as const;
 
-// tmux session name shared by all `akf up` sessions for a container. `-A` on
-// new-session attaches to it if it exists, so a second `akf up` reuses it.
-export const TMUX_SESSION = "akf";
-
 // Allowed top-level keys — used by the validator to reject typos.
 export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "$schema",

@@ -9,7 +9,7 @@ import {
   SCHEMA_VERSION,
   VOLUME_NAME_RE,
 } from "./schema.ts";
-import { listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
+import { applyPluginTransforms, listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
 import { pathExists, projectSlug } from "./fs.ts";
 
 export type ConfigSource =
@@ -398,6 +398,11 @@ export async function resolveConfig({
     source = { kind: "defaults", dir: found.dir };
   }
 
+  // Plugin config effects (mounts, ports, env, image) resolve here on every
+  // invocation — they are never materialized into the config file (tasks/011).
+  config = applyPluginTransforms(config, { workspaceDir: source.dir });
+
+  // CLI flags are the outermost layer: they override plugin transforms too.
   if (cliOverrides.command) config = { ...config, command: cliOverrides.command };
   if (cliOverrides.image) config = { ...config, image: cliOverrides.image };
 

@@ -1,18 +1,29 @@
 # Plan: 011 — Plugin runtime hooks (minimal core, powerful plugins)
 
+## Status
+
+- **Done:** step 1 (runtime resolution — `transformConfig` applied in `resolveConfig`, `withPlugin`
+  writes only the plugins section, this repo's own config de-materialized), the flag-ownership
+  mechanism from step 5 (`flags` declaration, `cli/lib/flags.ts` collision check + unit tests), and
+  step 6 (tmux internal plugin with `preRun`/`wrapCommand`/`containerName`, container-name path-hash
+  fix, `--serve` name hash fix).
+- **Open:** step 2 (machine-owned blocks + `akf plugin sync`), step 3 (leftover auto-migration in
+  `akf up`), step 4 (1Password `runtimeEnv`), the rest of step 5 (move `--serve` into the ssh
+  plugin), step 7 (schema generation).
+
 ## Context
 
 A full review of the plugin system (2026-07) surfaced one structural flaw and its consequences:
 
 - **Materialize-at-add.** `applyConfig` runs once, at `akf plugin add`, and writes derived state
   (mounts, ports, `image`) into `.apfelkaefig.json`. Nothing at runtime re-applies plugin
-  transforms. Editing `plugins.telegram.sha` or `plugins.ssh.port` afterwards changes nothing —
-  the Dockerfile block keeps the old SHA baked as a literal `ARG`, `ports[]` keeps publishing the
-  old port. The drift refusal in `upsertBlock` (`cli/lib/fs.ts:145`) then *blocks* the repair path:
-  re-running `akf plugin add` renders the block from the new config, which no longer matches the
-  old block, and throws "owned block differs from generated content". There is no supported way to
-  bump the telegram pin today, even though the doctor and the generated Dockerfile both tell the
-  user to do exactly that.
+  transforms. Editing `plugins.telegram.sha` or `plugins.ssh.port` afterwards changes nothing — the
+  Dockerfile block keeps the old SHA baked as a literal `ARG`, `ports[]` keeps publishing the old
+  port. The drift refusal in `upsertBlock` (`cli/lib/fs.ts:145`) then _blocks_ the repair path:
+  re-running `akf plugin add` renders the block from the new config, which no longer matches the old
+  block, and throws "owned block differs from generated content". There is no supported way to bump
+  the telegram pin today, even though the doctor and the generated Dockerfile both tell the user to
+  do exactly that.
 - **Run logic leaking into core.** The ssh plugin owns image + config, but ~50 lines of its run
   behavior (`SSH_ENTRYPOINT`, key reading, root/tty overrides, `akf-serve-*` naming, the banner)
   live inline in `cli/commands/up.ts:237-279`. tmux is fully hardcoded across `up.ts` /
@@ -26,16 +37,15 @@ features (tmux, 1Password) that predate the plugin system.
 
 Numbered as discussed; these are settled, not open questions.
 
-1. **Hook surface: exactly what existing consumers need, nothing speculative.** The three
-   consumers are ssh `--serve`, tmux, and 1Password. That yields five hooks (sketch below):
-   `transformConfig`, `preRun`, `runtimeEnv`, `wrapCommand`, `containerName`. No post-run hooks,
-   no watchers, no event bus — add a hook only when a concrete plugin needs it. (Guideline
-   recorded in CLAUDE.md.)
+1. **Hook surface: exactly what existing consumers need, nothing speculative.** The three consumers
+   are ssh `--serve`, tmux, and 1Password. That yields five hooks (sketch below): `transformConfig`,
+   `preRun`, `runtimeEnv`, `wrapCommand`, `containerName`. No post-run hooks, no watchers, no event
+   bus — add a hook only when a concrete plugin needs it. (Guideline recorded in CLAUDE.md.)
 
-2. **Materialize vs. resolve: split per *effect*, not per plugin.**
-   - *Materialized (files on disk):* Dockerfile blocks (build inputs) and CLAUDE.md blocks (read
-     by the agent, not by akf). These must exist as files; they stay written by `init`/`add`/`sync`.
-   - *Resolved at runtime (`container run` arguments):* mounts, ports, env, image ref. Computed on
+2. **Materialize vs. resolve: split per _effect_, not per plugin.**
+   - _Materialized (files on disk):_ Dockerfile blocks (build inputs) and CLAUDE.md blocks (read by
+     the agent, not by akf). These must exist as files; they stay written by `init`/`add`/`sync`.
+   - _Resolved at runtime (`container run` arguments):_ mounts, ports, env, image ref. Computed on
      every `akf up` from `plugins.{id}` config via `transformConfig`; **never** written into
      `.apfelkaefig.json`. This kills the two-sources-of-truth bugs while keeping builds
      reproducible.
@@ -44,41 +54,41 @@ Numbered as discussed; these are settled, not open questions.
    `upsertBlock` re-renders owned blocks idempotently every time (`overwrite: true`), printing
    "updated" when content changed. A user who wants to hand-maintain a block removes the
    `# >>> akf plugin: … <<<` markers — no markers, akf appends a fresh block but never touches the
-   de-adopted copy. Document this contract in the markers themselves ("machine-owned; edits will
-   be overwritten — remove these markers to take ownership").
+   de-adopted copy. Document this contract in the markers themselves ("machine-owned; edits will be
+   overwritten — remove these markers to take ownership").
 
-4. **tmux becomes an *internal* plugin; its user surface doesn't change.** The tmux logic
+4. **tmux becomes an _internal_ plugin; its user surface doesn't change.** The tmux logic
    (`wrapCommand` for the session wrap, `containerName` for the stable name, `preRun` for the
-   attach-vs-run branch) moves into `cli/plugins/tmux/plugin.ts` using the same hooks as every
-   other plugin — one mechanism in the codebase. Users never write `plugins.tmux`: the existing
-   top-level `tmux: true` key and the `--tmux` flag are sugar that enables the internal plugin.
-   This keeps drive-by (tier 1) and devcontainer (tier 3) projects working with no config file.
-   While moving it, fix the container-name collision: `sandboxContainerName` gains a path-hash
-   suffix (`akf-<slug>-<djb2Hex(workspaceDir).slice(0,8)>`, same scheme as the telegram plugin's
-   instance volumes) so two projects with the same basename can't attach to each other's sandbox
-   or `rm -f` each other's stopped box. Same fix for `akf-serve-*`.
+   attach-vs-run branch) moves into `cli/plugins/tmux/plugin.ts` using the same hooks as every other
+   plugin — one mechanism in the codebase. Users never write `plugins.tmux`: the existing top-level
+   `tmux: true` key and the `--tmux` flag are sugar that enables the internal plugin. This keeps
+   drive-by (tier 1) and devcontainer (tier 3) projects working with no config file. While moving
+   it, fix the container-name collision: `sandboxContainerName` gains a path-hash suffix
+   (`akf-<slug>-<djb2Hex(workspaceDir).slice(0,8)>`, same scheme as the telegram plugin's instance
+   volumes) so two projects with the same basename can't attach to each other's sandbox or `rm -f`
+   each other's stopped box. Same fix for `akf-serve-*`.
 
 5. **1Password becomes a real plugin, backwards compatible.** The `resolveOp` injection moves from
    `up.ts:217-227` into the 1password plugin's `runtimeEnv` hook. `secrets.onepassword` stays
-   accepted as a deprecated alias: the config validator maps it onto `plugins.1password` and emits
-   a one-line deprecation warning. Remove the alias in a future major version, not now.
+   accepted as a deprecated alias: the config validator maps it onto `plugins.1password` and emits a
+   one-line deprecation warning. Remove the alias in a future major version, not now.
 
-6. **Plugins own CLI flags; collisions are developer errors.** A plugin declares
-   `flags: ["serve"]`; the `up` parser accepts declared flags generically and hands them to the
-   plugin's `preRun` ctx. Because plugins are compiled-in (decision 8), a collision — two plugins
-   claiming `--foo`, or a plugin claiming a core flag like `--rebuild` — is caught at **registry
-   construction** (throw on duplicate) and pinned by a unit test that asserts global flag
-   uniqueness. No runtime precedence rules.
+6. **Plugins own CLI flags; collisions are developer errors.** A plugin declares `flags: ["serve"]`;
+   the `up` parser accepts declared flags generically and hands them to the plugin's `preRun` ctx.
+   Because plugins are compiled-in (decision 8), a collision — two plugins claiming `--foo`, or a
+   plugin claiming a core flag like `--rebuild` — is caught at **registry construction** (throw on
+   duplicate) and pinned by a unit test that asserts global flag uniqueness. No runtime precedence
+   rules.
 
 7. **Deterministic hook order = order in the config file.** `wrapCommand` composes (later plugins
-   wrap the already-wrapped command). Exclusive hooks — `containerName`, full command
-   *replacement* — error loudly if two enabled plugins claim them. The one known interaction,
-   `--serve` disabling tmux wrapping, becomes an explicit rule in the ssh plugin (its command
-   replacement declares exclusivity) instead of the silent `&& !opts.serve` in `up.ts:89`.
+   wrap the already-wrapped command). Exclusive hooks — `containerName`, full command _replacement_
+   — error loudly if two enabled plugins claim them. The one known interaction, `--serve` disabling
+   tmux wrapping, becomes an explicit rule in the ssh plugin (its command replacement declares
+   exclusivity) instead of the silent `&& !opts.serve` in `up.ts:89`.
 
 8. **Built-in only, compiled in.** No dynamic loading, no third-party plugins. Arbitrary code with
-   `preRun` powers in a tool whose pitch is sandboxing is a trust problem, and dynamic import
-   fights `deno compile`. Revisit only on concrete external demand. (Guideline in CLAUDE.md.)
+   `preRun` powers in a tool whose pitch is sandboxing is a trust problem, and dynamic import fights
+   `deno compile`. Revisit only on concrete external demand. (Guideline in CLAUDE.md.)
 
 9. **Generate `schema/v1.json` from plugin-owned fragments.** Each plugin exports its JSON-schema
    fragment and TS config type next to its implementation; a `deno task gen-schema` assembles
@@ -89,15 +99,15 @@ Numbered as discussed; these are settled, not open questions.
 10. **Migration + versioning: `akf up` self-heals old configs.** Existing projects (including this
     repo's own `.apfelkaefig.json`) carry materialized leftovers — ssh's mounts/ports written at
     add-time, now also derived at runtime. Plan:
-    - Runtime resolution dedupes by mount target and by host port, so leftovers are harmless on
-      day one.
+    - Runtime resolution dedupes by mount target and by host port, so leftovers are harmless on day
+      one.
     - `akf up` detects materialized state that runtime resolution now derives (exact match of a
       derived mount/port against a config entry) and **auto-updates** the config: strips the
       leftovers, writes the result, prints one line
       (`updated .apfelkaefig.json: removed 3 entries now derived by plugins (backup: .apfelkaefig.json.bak)`).
-    - Marker blocks gain a version in the start marker (`# >>> akf plugin: ssh v2`); `akf up`
-      (cheap check) or `akf plugin sync` re-renders when the version or rendered content differs —
-      this is the "changed behaviours auto-update" routine.
+    - Marker blocks gain a version in the start marker (`# >>> akf plugin: ssh v2`); `akf up` (cheap
+      check) or `akf plugin sync` re-renders when the version or rendered content differs — this is
+      the "changed behaviours auto-update" routine.
     - Config `version` stays `1` (all changes here are additive). The auto-migration machinery is
       the foundation: when a breaking schema change eventually lands, `version: 2` reuses the same
       detect-migrate-backup-report path.
@@ -108,10 +118,10 @@ Numbered as discussed; these are settled, not open questions.
 // cli/plugins/types.ts — additions. All hooks optional; a config-only plugin
 // (1password before this plan) is still valid.
 export interface RunContext {
-  resolved: ResolvedConfig;          // config with transformConfig already applied
+  resolved: ResolvedConfig; // config with transformConfig already applied
   workspaceDir: string;
-  flags: Record<string, boolean>;    // this plugin's declared flags, parsed from `akf up`
-  run: Runner;                       // for `container …` subcommands (preRun orphan cleanup etc.)
+  flags: Record<string, boolean>; // this plugin's declared flags, parsed from `akf up`
+  run: Runner; // for `container …` subcommands (preRun orphan cleanup etc.)
 }
 
 export interface BuiltInPlugin {
@@ -120,8 +130,11 @@ export interface BuiltInPlugin {
 
   // Replaces applyConfig. Runs at resolveConfig time on EVERY invocation; the
   // result is used for `container run` args and never written to disk.
-  transformConfig?: (base: ApfelkaefigConfig, config: Record<string, unknown>,
-                     ctx: PluginContext) => ApfelkaefigConfig;
+  transformConfig?: (
+    base: ApfelkaefigConfig,
+    config: Record<string, unknown>,
+    ctx: PluginContext,
+  ) => ApfelkaefigConfig;
 
   // CLI flags this plugin owns on `akf up`. Uniqueness enforced at registry init.
   flags?: string[];
@@ -129,8 +142,8 @@ export interface BuiltInPlugin {
   // Validation, banners, attach-vs-run branches, orphan cleanup. Returning an
   // exit signal stops `akf up`; "attach" hands over to an alternate spawn path.
   preRun?: (ctx: RunContext) => Promise<
-    { action: "continue" } | { action: "exit"; code: number } |
-    { action: "attach"; args: string[] }>;
+    { action: "continue" } | { action: "exit"; code: number } | { action: "attach"; args: string[] }
+  >;
 
   // Env injected at run time (OP token, authorized key). Never persisted.
   runtimeEnv?: (ctx: RunContext) => Promise<Record<string, string>>;
