@@ -93,6 +93,9 @@ export interface BuiltInPlugin {
   // Validation, banners, attach-vs-run branches, orphan cleanup. Runs before
   // image resolution, in config-file order.
   preRun?: (ctx: RunContext) => Promise<PreRunResult>;
+  // Env injected into the container at run time (secrets, keys). Never
+  // persisted anywhere; merged across plugins in config-file order.
+  runtimeEnv?: (ctx: RunContext) => Promise<Record<string, string>>;
   // Compose-wrap the in-container command. Applied in config-file order.
   wrapCommand?: (command: string[], ctx: RunContext) => string[];
   // Exclusive: stable container name for this run. Two claimants → hard error.

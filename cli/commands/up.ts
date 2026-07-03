@@ -29,7 +29,7 @@ import { migrateMaterializedConfig } from "../lib/migrate.ts";
 import { djb2Hex, projectSlug } from "../lib/fs.ts";
 import { type BuiltInPlugin, getPlugin, type PluginId, type RunContext } from "../lib/plugins.ts";
 import { tmuxPlugin } from "../plugins/tmux/plugin.ts";
-import { resolveOp, SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
+import { SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
 import { runBuild } from "./build.ts";
 
 export interface UpOptions {
@@ -123,6 +123,12 @@ export async function runUp(opts: UpOptions): Promise<number> {
   const runtimePlugins: BuiltInPlugin[] = Object.entries(resolved.config.plugins ?? {})
     .filter(([, pc]) => pc?.enabled)
     .map(([id]) => getPlugin(id as PluginId));
+  // 1Password is implicit-on (inject when a token is present, even with no
+  // config at all) — include its runtime hooks unless the config has an
+  // explicit plugins.1password section, in which case the loop above decides.
+  if (resolved.config.plugins?.["1password"] === undefined) {
+    runtimePlugins.push(getPlugin("1password"));
+  }
   if (tmuxEnabled) runtimePlugins.push(tmuxPlugin);
 
   const runCtx: RunContext = {
@@ -281,11 +287,14 @@ export async function runUp(opts: UpOptions): Promise<number> {
     return 1;
   }
 
-  // 1Password injection.
+  // runtimeEnv hooks: env injected at run time (OP token, …), never persisted.
   let extraEnv: Record<string, string> | undefined;
   try {
-    const token = await resolveOp({ explicit: resolved.config.secrets?.onepassword });
-    if (token) extraEnv = { OP_SERVICE_ACCOUNT_TOKEN: token };
+    for (const plugin of runtimePlugins) {
+      if (!plugin.runtimeEnv) continue;
+      const env = await plugin.runtimeEnv(runCtx);
+      if (Object.keys(env).length > 0) extraEnv = { ...extraEnv, ...env };
+    }
   } catch (err) {
     if (err instanceof SecretsRequiredError || err instanceof TruncatedTokenError) {
       console.error(`akf up: ${err.message}`);

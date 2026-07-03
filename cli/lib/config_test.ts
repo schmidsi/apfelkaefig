@@ -693,3 +693,24 @@ Deno.test("resolveConfig: CLI image override beats plugin transforms", async () 
     assertEquals(r.config.image, "node:22");
   });
 });
+
+Deno.test("resolveConfig: warns on deprecated explicit secrets.onepassword", async () => {
+  await withTmpDir(async (dir) => {
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({ version: 1, secrets: { onepassword: true } }),
+    );
+    const r = await resolveConfig({ cwd: dir });
+    assert(r.warnings.some((w) => w.includes("'secrets.onepassword' is deprecated")));
+    // Still honored.
+    assertEquals(r.config.secrets?.onepassword, true);
+
+    // No warning when the plugin section is the source.
+    await Deno.writeTextFile(
+      join(dir, ".apfelkaefig.json"),
+      JSON.stringify({ version: 1, plugins: { "1password": { enabled: true } } }),
+    );
+    const viaPlugin = await resolveConfig({ cwd: dir });
+    assertEquals(viaPlugin.warnings, []);
+  });
+});

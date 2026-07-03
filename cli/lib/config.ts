@@ -356,6 +356,13 @@ export async function resolveConfig({
     }
     const text = await Deno.readTextFile(found.apfelkaefig);
     config = parseConfig(text, found.apfelkaefig);
+    // Deprecated alias (tasks/011, decision 5): explicit secrets.onepassword
+    // still works, but the plugin section is the canonical spelling now.
+    if (config.secrets?.onepassword === true && config.plugins?.["1password"] === undefined) {
+      warnings.push(
+        "'secrets.onepassword' is deprecated — run `akf plugin add 1password` (still honored)",
+      );
+    }
     source = { kind: "apfelkaefig", path: found.apfelkaefig, dir: found.dir, raw: config };
   } else if (found.devcontainer) {
     const text = await Deno.readTextFile(found.devcontainer);
