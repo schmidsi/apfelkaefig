@@ -379,12 +379,30 @@ async function online(): Promise<boolean> {
   }
 }
 
+// Env var names whose values are secrets and must never hit the debug log
+// (e.g. the injected 1Password service-account token, an authorized SSH key).
+const SECRET_ENV_RE = /TOKEN|SECRET|PASSWORD|CREDENTIAL|_KEY\b|AUTHORIZED_KEY/i;
+
+// Mask the values of secret-bearing `-e KEY=VALUE` args so `AKF_DEBUG` can show
+// the full invocation without leaking tokens. Only values of sensitive keys are
+// redacted; everything else (mounts, benign env, the command) prints verbatim.
+export function redactDebugArgs(args: string[]): string[] {
+  return args.map((arg, i) => {
+    if (args[i - 1] !== "-e") return arg;
+    const eq = arg.indexOf("=");
+    if (eq < 0) return arg;
+    const key = arg.slice(0, eq);
+    return SECRET_ENV_RE.test(key) ? `${key}=***` : arg;
+  });
+}
+
 // Print the exact `container` invocation when AKF_DEBUG is set. Volume/mount
 // bootstrap failures (e.g. "storage device attachment is invalid") are opaque
-// without seeing the actual -v flags akf generated.
+// without seeing the actual -v flags akf generated. Secret env values are
+// masked (see redactDebugArgs).
 function debugCmd(args: string[]): void {
   if (Deno.env.get("AKF_DEBUG")) {
-    console.error(`akf debug: container ${args.join(" ")}`);
+    console.error(`akf debug: container ${redactDebugArgs(args).join(" ")}`);
   }
 }
 
