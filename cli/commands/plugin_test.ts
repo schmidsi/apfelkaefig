@@ -1,9 +1,8 @@
 import { withTmpDir } from "../lib/test_util.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { join } from "@std/path";
-import { addPluginToWorkspace } from "./plugin.ts";
+import { addPluginToWorkspace, syncPluginBlocks } from "./plugin.ts";
 import { runInit } from "./init.ts";
-import { PluginError } from "../lib/plugins.ts";
 
 Deno.test("plugin add 1password creates config and marker block", async () => {
   await withTmpDir(async (dir) => {
@@ -57,7 +56,7 @@ Deno.test("plugin add writes to discovered workspace root from subdir", async ()
   });
 });
 
-Deno.test("plugin add refuses edited owned marker block", async () => {
+Deno.test("plugin add overwrites an edited owned marker block (machine-owned)", async () => {
   await withTmpDir(async (dir) => {
     await addPluginToWorkspace({ cwd: dir, plugin: "1password" });
     const claudePath = join(dir, "CLAUDE.md");
@@ -65,11 +64,12 @@ Deno.test("plugin add refuses edited owned marker block", async () => {
       claudePath,
       "<!-- akf plugin: 1password start -->\nuser edit\n<!-- akf plugin: 1password end -->\n",
     );
-    await assertRejects(
-      () => addPluginToWorkspace({ cwd: dir, plugin: "1password" }),
-      PluginError,
-      "differs from generated content",
-    );
+    const result = await addPluginToWorkspace({ cwd: dir, plugin: "1password" });
+    assertEquals(result.markerStatuses, [{ path: "CLAUDE.md", status: "updated" }]);
+    const claude = await Deno.readTextFile(claudePath);
+    assert(claude.includes("op read"), "generated content not restored");
+    assert(!claude.includes("user edit"), "hand edit survived inside owned block");
+    assert(claude.includes("machine-owned by akf"), "ownership note missing");
   });
 });
 
@@ -109,17 +109,42 @@ Deno.test("plugin add crit is idempotent", async () => {
   });
 });
 
-Deno.test("plugin add crit refuses edited Dockerfile owned block", async () => {
+Deno.test("plugin add crit overwrites an edited Dockerfile owned block", async () => {
   await withTmpDir(async (dir) => {
     await addPluginToWorkspace({ cwd: dir, plugin: "crit" });
     const dockerfilePath = join(dir, ".devcontainer/Dockerfile");
     const dockerfile = await Deno.readTextFile(dockerfilePath);
     await Deno.writeTextFile(dockerfilePath, dockerfile.replace("crit --version", "echo edited"));
-    await assertRejects(
-      () => addPluginToWorkspace({ cwd: dir, plugin: "crit" }),
-      PluginError,
-      "differs from generated content",
+    const result = await addPluginToWorkspace({ cwd: dir, plugin: "crit" });
+    assertEquals(result.markerStatuses[0], { path: ".devcontainer/Dockerfile", status: "updated" });
+    const restored = await Deno.readTextFile(dockerfilePath);
+    assert(restored.includes("crit --version"), "generated content not restored");
+    assert(!restored.includes("echo edited"), "hand edit survived inside owned block");
+  });
+});
+
+Deno.test("plugin sync re-renders the Dockerfile block after a config edit (sha bump)", async () => {
+  await withTmpDir(async (dir) => {
+    await addPluginToWorkspace({ cwd: dir, plugin: "telegram" });
+    const configPath = join(dir, ".apfelkaefig.json");
+    const newSha = "a".repeat(40);
+    const config = JSON.parse(await Deno.readTextFile(configPath));
+    config.plugins.telegram.sha = newSha;
+    await Deno.writeTextFile(configPath, JSON.stringify(config, null, 2));
+
+    const code = await syncPluginBlocks({ cwd: dir });
+    assertEquals(code, 0);
+    const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
+    assert(
+      dockerfile.includes(`TELEGRAM_CLI_SHA=${newSha}`),
+      "sync did not propagate the bumped sha into the Dockerfile block",
     );
+  });
+});
+
+Deno.test("plugin sync without a config errors cleanly", async () => {
+  await withTmpDir(async (dir) => {
+    assertEquals(await syncPluginBlocks({ cwd: dir }), 1);
   });
 });
 

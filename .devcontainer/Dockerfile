@@ -19,6 +19,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 USER node
 
 # >>> akf plugin: ssh
+# machine-owned by akf: overwritten by `akf plugin add`/`akf plugin sync`. Remove the marker lines to take ownership.
 # Root for the install/config steps below: this block may be appended after a
 # Dockerfile that ended as a non-root user (e.g. a project Dockerfile ending
 # 'USER node'). Runtime user is set separately via 'container run -u', so the

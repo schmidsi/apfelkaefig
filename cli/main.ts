@@ -31,8 +31,10 @@ Usage:
                            profile — e.g. ~/.claude-work → 'claude-work'.
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
-  akf plugin list|explain|add
-                           Manage built-in sandbox plugins.
+  akf plugin list|explain|add|sync
+                           Manage built-in sandbox plugins. sync re-renders
+                           the generated Dockerfile/CLAUDE.md blocks after a
+                           config edit (blocks are machine-owned).
   akf statusline           Install the Claude Code statusline helper into
                            ~/.claude/bin/ (one-time, global).
   akf build [--from-dockerfile <path>]

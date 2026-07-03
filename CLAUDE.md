@@ -30,7 +30,8 @@ for themselves.
   scope. Decide which tier a change belongs to before adding code.
 - **Marker-managed blocks** must be re-rendered idempotently by `akf init`, never hand-merged:
   `<!-- akf:start -->` / `<!-- akf:end -->` in this file, `# >>> akf >>>` / `# <<< akf <<<` in host
-  `.gitignore`.
+  `.gitignore`. Plugin blocks (`akf plugin: …` markers) are **machine-owned**: `akf plugin
+  add`/`sync` overwrite them without asking — removing the markers is how a user takes ownership.
 - **Never touch `settings.local.json`** from `akf init` — `--dangerously-skip-permissions` makes it
   dead config, and merging into it breaks user edits.
 - **Minimal core, powerful plugins.** New capabilities and run-behaviors go into plugins
@@ -71,6 +72,7 @@ read-only.
 
 
 <!-- akf plugin: ssh start -->
+<!-- machine-owned by akf: overwritten by `akf plugin add`/`akf plugin sync`. Remove the marker comments to take ownership. -->
 ## SSH access to the sandbox
 
 This project enables the akf `ssh` plugin. Run:
