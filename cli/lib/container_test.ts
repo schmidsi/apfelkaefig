@@ -13,7 +13,9 @@ import {
   tmuxWrap,
 } from "./container.ts";
 import type { Runner } from "./container.ts";
+import { join } from "@std/path";
 import { sandboxStamp } from "./baseimage.ts";
+import { withTmpDir } from "./test_util.ts";
 import type { ResolvedConfig } from "./config.ts";
 
 function resolved(
@@ -171,6 +173,40 @@ Deno.test("buildRunArgs: commandOverride bypasses tmux wrapping even when tmux:t
     commandOverride: ["/usr/local/bin/akf-sshd"],
   });
   assertEquals(out.args.slice(-2), ["img", "/usr/local/bin/akf-sshd"]);
+});
+
+Deno.test("buildRunArgs: overlays the staged credential after the ~/.claude mount", async () => {
+  await withTmpDir(async (home) => {
+    await Deno.mkdir(join(home, ".claude"));
+    const creds = join(home, "staged-credentials.json");
+    await Deno.writeTextFile(creds, "{}");
+    const out = buildRunArgs({
+      resolved: resolved({}),
+      workspaceHostPath: "/Users/me/proj",
+      homeDir: home,
+      imageRef: "img",
+      claudeCredentialsFile: creds,
+    });
+    const dirMount = out.args.indexOf(`${join(home, ".claude")}:/home/node/.claude`);
+    const fileMount = out.args.indexOf(`${creds}:/home/node/.claude/.credentials.json`);
+    assert(dirMount > 0, "~/.claude dir mount missing");
+    assert(fileMount > 0, "credential overlay mount missing");
+    assert(dirMount < fileMount, "overlay must come after the dir mount to win");
+  });
+});
+
+Deno.test("buildRunArgs: no credential overlay when ~/.claude isn't mounted", () => {
+  const out = buildRunArgs({
+    resolved: resolved({}),
+    workspaceHostPath: "/Users/me/proj",
+    homeDir: "/nonexistent-home",
+    imageRef: "img",
+    claudeCredentialsFile: "/tmp/staged.json",
+  });
+  assert(
+    !out.args.some((a) => a.includes(".credentials.json")),
+    "must not overlay creds without a ~/.claude mount",
+  );
 });
 
 Deno.test("sandboxStamp: deterministic and input-sensitive", async () => {

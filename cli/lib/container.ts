@@ -52,6 +52,11 @@ export interface RunFlagsInput {
   extraEnv?: Record<string, string>;
   // Override the default home dir (test seam).
   homeDir?: string;
+  // Host path to a fresh Claude OAuth credential (staged from the macOS
+  // Keychain by up.ts). When set and ~/.claude is mounted, it's overlay-mounted
+  // onto the container's ~/.claude/.credentials.json so the sandbox inherits the
+  // host's live login instead of a stale on-disk token.
+  claudeCredentialsFile?: string;
   // Allocate a TTY (`-t`). Defaults to whether stdin is a terminal — matches
   // docker/podman. When false, Apple `container` 0.12 fails with a cryptic
   // ENODEV ("Operation not supported by device") if `-t` is forced anyway.
@@ -129,7 +134,22 @@ export function buildRunArgs(
   const isDriveBy = input.resolved.source.kind === "defaults";
   if (home) {
     const claudeSource = expandHome(sub(e.claudeConfigDir ?? `${home}/.claude`), home);
-    pushMountIfExists(pushMount, claudeSource, `/home/${e.user}/.claude`, false);
+    const claudeMounted = pushMountIfExists(
+      pushMount,
+      claudeSource,
+      `/home/${e.user}/.claude`,
+      false,
+    );
+    // Overlay a fresh OAuth credential on top of the mounted ~/.claude. On
+    // macOS Claude Code refreshes its token into the Keychain, leaving the
+    // on-disk ~/.claude/.credentials.json stale (expired + rotated refresh
+    // token) — so the sandbox is forced to re-login. up.ts stages the current
+    // Keychain credential to a file and we shadow just that one path with it,
+    // without writing to the user's ~/.claude. Must follow the dir mount so it
+    // wins for that path.
+    if (claudeMounted && input.claudeCredentialsFile) {
+      pushMount(input.claudeCredentialsFile, `/home/${e.user}/.claude/.credentials.json`, false);
+    }
     if (!isDriveBy) {
       pushMountIfExists(pushMount, `${home}/Downloads`, `/home/${e.user}/Downloads`, true);
       pushMountIfExists(pushMount, `${home}/Desktop`, `/home/${e.user}/Desktop`, true);
@@ -247,9 +267,9 @@ function pushMountIfExists(
   src: string,
   tgt: string,
   readonly: boolean,
-): void {
-  if (!pathExistsSync(src)) return;
-  push(src, tgt, readonly);
+): boolean {
+  if (!pathExistsSync(src)) return false;
+  return push(src, tgt, readonly);
 }
 
 function stdinIsTerminal(): boolean {

@@ -20,6 +20,7 @@ import {
   sandboxContainerName,
   stopContainer,
 } from "../lib/container.ts";
+import { stageClaudeCredentials } from "../lib/claude_creds.ts";
 import { ConfigError, effective, resolveConfig, substitute } from "../lib/config.ts";
 import { projectSlug } from "../lib/fs.ts";
 import { TMUX_SESSION } from "../lib/schema.ts";
@@ -305,6 +306,17 @@ export async function runUp(opts: UpOptions): Promise<number> {
     }
   }
 
+  // Stage the host's live Claude login so the sandbox doesn't re-auth against a
+  // stale on-disk token (macOS refreshes into the Keychain; see claude_creds).
+  // Best-effort — any failure just falls back to whatever ~/.claude carries.
+  let claudeCredentialsFile: string | undefined;
+  try {
+    const home = Deno.env.get("HOME");
+    if (home) claudeCredentialsFile = (await stageClaudeCredentials({ home })) ?? undefined;
+  } catch (err) {
+    if (Deno.env.get("AKF_DEBUG")) console.error(`akf debug: credential staging skipped: ${err}`);
+  }
+
   const built = buildRunArgs({
     resolved,
     workspaceHostPath: resolved.workspaceDir,
@@ -314,6 +326,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
     userOverride,
     tty,
     name: serveName ?? sandboxName,
+    claudeCredentialsFile,
   });
 
   debugCmd(built.args);
