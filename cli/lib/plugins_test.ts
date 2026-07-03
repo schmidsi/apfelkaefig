@@ -74,7 +74,7 @@ Deno.test("withPlugin telegram writes defaults but no mounts", () => {
   assertEquals(tg.storage, "instance");
   assertEquals(tg.userIsolation, false);
   assertEquals(tg.repo, "https://github.com/gskril/telegram-cli.git");
-  assert(/^[a-f0-9]{40}$/.test(tg.sha), "sha is 40-char hex");
+  assert(/^[a-f0-9]{40}$/.test(tg.sha as string), "sha is 40-char hex");
   assertEquals(config.image, undefined);
   assertEquals(config.mounts, undefined);
 });
@@ -235,5 +235,28 @@ Deno.test("plugin flags: collision between two plugins is a developer error", ()
       ),
     Error,
     "plugin 'b' declares flag '--foo'",
+  );
+});
+
+// --- schema generation golden test (tasks/011, decision 9) ---
+
+import schemaJson from "../../schema/v1.json" with { type: "json" };
+import { listPlugins } from "./plugins.ts";
+
+Deno.test("schema/v1.json plugin sections match the plugins' configSchema fragments", () => {
+  const generated: Record<string, unknown> = {};
+  for (const plugin of listPlugins()) {
+    assert(plugin.configSchema, `plugin '${plugin.id}' has no configSchema fragment`);
+    generated[plugin.id] = plugin.configSchema;
+  }
+  const inFile = (schemaJson as {
+    properties: { plugins: { properties: Record<string, unknown> } };
+  }).properties.plugins.properties;
+  // Byte-level equality of the JSON encodings — when this fails, a plugin's
+  // fragment changed without regenerating: run `deno task gen-schema`.
+  assertEquals(
+    JSON.parse(JSON.stringify(inFile)),
+    JSON.parse(JSON.stringify(generated)),
+    "schema/v1.json is stale — run `deno task gen-schema`",
   );
 });

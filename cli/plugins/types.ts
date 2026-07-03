@@ -72,6 +72,11 @@ export interface BuiltInPlugin {
   id: string;
   aliases: string[];
   description: string;
+  // JSON Schema fragment for this plugin's `plugins.{id}` config section.
+  // `deno task gen-schema` assembles schema/v1.json from these; a golden test
+  // fails when a fragment changed without regenerating. Required for public
+  // (registry) plugins; internal plugins have no config section.
+  configSchema?: Record<string, unknown>;
   // Validate this plugin's raw config object from .apfelkaefig.json. Throw a
   // plain Error with the user-facing message; the config layer wraps it in a
   // ConfigError carrying the source path. (Plugins can't throw ConfigError

@@ -23,12 +23,9 @@ import type {
   PluginDoctorContext,
   SetupStep,
 } from "../types.ts";
-import {
-  type ApfelkaefigConfig,
-  type MountConfig,
-  type TelegramStorage,
-  VOLUME_NAME_RE,
-} from "../../lib/schema.ts";
+import { type ApfelkaefigConfig, type MountConfig, VOLUME_NAME_RE } from "../../lib/schema.ts";
+
+type TelegramStorage = "instance" | "named" | "host";
 
 const DEFAULT_REPO = "https://github.com/gskril/telegram-cli.git";
 // Latest gskril/telegram-cli HEAD at plugin time. Bump by hand when the
@@ -54,6 +51,62 @@ export const telegramPlugin: BuiltInPlugin = {
   id: "telegram",
   aliases: ["tg"],
   description: "Install gskril/telegram-cli with per-project isolated session storage.",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "repo",
+      "sha",
+      "storage",
+      "userIsolation",
+    ],
+    "description": "Install gskril/telegram-cli with per-project isolated session storage.",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the Telegram CLI integration.",
+      },
+      "repo": {
+        "type": "string",
+        "pattern": "^https://[^\\s]+\\.git$",
+        "description":
+          "https git URL of the telegram-cli fork to install. Defaults to gskril/telegram-cli.",
+      },
+      "sha": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{40}$",
+        "description": "Pinned commit SHA to check out and build from.",
+      },
+      "storage": {
+        "type": "string",
+        "enum": [
+          "instance",
+          "named",
+          "host",
+        ],
+        "description":
+          "Session storage. 'instance': per-clone named volumes (path-derived). 'named': repo-scoped named volumes shared across clones on the same host. 'host': bind-mount host ~/.config/telegram-cli and state dir (no isolation from host).",
+        "default": "instance",
+      },
+      "userIsolation": {
+        "type": "boolean",
+        "description":
+          "If true, install a dedicated 'telegram' system user and require sudo from the agent user to invoke the CLI. Incompatible with storage='host'.",
+        "default": false,
+      },
+      "configVolume": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "description": "Override the derived config volume name (storage='named' only).",
+      },
+      "stateVolume": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "description": "Override the derived state volume name (storage='named' only).",
+      },
+    },
+  },
   validateConfig(config) {
     const allowed = [
       "enabled",

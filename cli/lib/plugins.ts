@@ -1,4 +1,4 @@
-import { type ApfelkaefigConfig, type PluginConfigMap, SCHEMA_URL } from "./schema.ts";
+import { type ApfelkaefigConfig, SCHEMA_URL } from "./schema.ts";
 import {
   type BuiltInPlugin,
   type MarkerBlock,
@@ -25,14 +25,14 @@ export type {
   SetupStep,
 };
 
-export type PluginId = keyof PluginConfigMap;
-
-const REGISTRY: Record<PluginId, BuiltInPlugin> = {
+const REGISTRY = {
   "1password": onePasswordPlugin,
   "crit": critPlugin,
   "telegram": telegramPlugin,
   "ssh": sshPlugin,
-};
+} satisfies Record<string, BuiltInPlugin>;
+
+export type PluginId = keyof typeof REGISTRY;
 
 const ALIASES = new Map<string, PluginId>();
 for (const plugin of Object.values(REGISTRY)) {

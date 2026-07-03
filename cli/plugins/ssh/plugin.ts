@@ -56,6 +56,41 @@ export const sshPlugin: BuiltInPlugin = {
   id: "ssh",
   aliases: [],
   description: "Run sshd in the sandbox so desktop agents can attach over SSH (`akf up --serve`).",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "authorizedKey",
+      "port",
+    ],
+    "description":
+      "Run sshd in the sandbox so the Claude Code / Codex desktop apps can attach over SSH. Reachable while `akf up --serve` is running.",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the SSH integration.",
+      },
+      "authorizedKey": {
+        "type": "string",
+        "description":
+          "Host path to the PUBLIC key authorized to connect. Default ${localEnv:HOME}/.ssh/id_ed25519.pub.",
+      },
+      "port": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 65535,
+        "default": 2222,
+        "description": "Host port (on 127.0.0.1) that the container's :22 is published on.",
+      },
+      "hostKeyVolume": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "description":
+          "Override the derived named volume that persists the sshd host key across runs (so reconnects don't trip known_hosts).",
+      },
+    },
+  },
   validateConfig(config) {
     const allowed = ["enabled", "authorizedKey", "port", "hostKeyVolume"];
     for (const k of Object.keys(config)) {

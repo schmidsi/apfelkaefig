@@ -11,6 +11,19 @@ export const onePasswordPlugin: BuiltInPlugin = {
   id: "1password",
   aliases: ["1pw", "op"],
   description: "Forward OP_SERVICE_ACCOUNT_TOKEN and document op read usage inside the sandbox.",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the 1Password sandbox integration.",
+      },
+    },
+  },
   validateConfig(config) {
     for (const k of Object.keys(config)) {
       if (k !== "enabled") {

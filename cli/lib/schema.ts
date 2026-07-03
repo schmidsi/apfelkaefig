@@ -1,5 +1,7 @@
-// TypeScript types matching schema/v1.json. Source of truth is the JSON Schema;
-// these types are hand-maintained — keep them in sync.
+// TypeScript types matching schema/v1.json. The top-level shape here is
+// hand-maintained against the JSON Schema; the per-plugin sections of the
+// JSON Schema are GENERATED from each plugin's configSchema fragment
+// (`deno task gen-schema`), so schema/v1.json is partly build output.
 
 export const SCHEMA_VERSION = 1;
 export const SCHEMA_URL = "https://apfelkaefig.com/schema/v1.json";
@@ -32,46 +34,13 @@ export interface PortConfig {
   protocol?: "tcp" | "udp";
 }
 
-export interface OnePasswordPluginConfig {
+// Per-plugin config section. The concrete shapes are owned by each plugin
+// (validateConfig + configSchema in cli/plugins/<id>/plugin.ts); the config
+// layer only knows "an object with enabled". schema/v1.json's plugin sections
+// are generated from those fragments by `deno task gen-schema`.
+export interface PluginSectionConfig {
   enabled: boolean;
   [key: string]: unknown;
-}
-
-export interface CritPluginConfig {
-  enabled: boolean;
-  agentIntegration: "claude-code";
-  installMethod: "pinned-release";
-  version: string;
-  port: number;
-  [key: string]: unknown;
-}
-
-export type TelegramStorage = "instance" | "named" | "host";
-
-export interface TelegramPluginConfig {
-  enabled: boolean;
-  repo: string;
-  sha: string;
-  storage: TelegramStorage;
-  userIsolation: boolean;
-  configVolume?: string;
-  stateVolume?: string;
-  [key: string]: unknown;
-}
-
-export interface SshPluginConfig {
-  enabled: boolean;
-  authorizedKey: string;
-  port: number;
-  hostKeyVolume?: string;
-  [key: string]: unknown;
-}
-
-export interface PluginConfigMap {
-  "1password"?: OnePasswordPluginConfig;
-  "crit"?: CritPluginConfig;
-  "telegram"?: TelegramPluginConfig;
-  "ssh"?: SshPluginConfig;
 }
 
 export type ImageConfig =
@@ -94,7 +63,7 @@ export interface ApfelkaefigConfig {
   tmux?: boolean;
   secrets?: SecretsConfig;
   ports?: PortConfig[];
-  plugins?: PluginConfigMap;
+  plugins?: Record<string, PluginSectionConfig | undefined>;
   // Overrides the host source path of the ~/.claude mount. Supports `~` and
   // ${localEnv:VAR} substitutions. Default: `${HOME}/.claude`.
   claudeConfigDir?: string;

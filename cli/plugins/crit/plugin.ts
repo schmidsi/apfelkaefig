@@ -37,6 +37,41 @@ export const critPlugin: BuiltInPlugin = {
   id: "crit",
   aliases: [],
   description: "Install Crit and publish its local review UI on 127.0.0.1:3247.",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "agentIntegration",
+      "installMethod",
+      "version",
+      "port",
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the Crit sandbox integration.",
+      },
+      "agentIntegration": {
+        "type": "string",
+        "const": "claude-code",
+      },
+      "installMethod": {
+        "type": "string",
+        "const": "pinned-release",
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^v\\d+\\.\\d+\\.\\d+$",
+      },
+      "port": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 3247,
+      },
+    },
+  },
   validateConfig(config) {
     const allowed = ["enabled", "agentIntegration", "installMethod", "version", "port"];
     for (const k of Object.keys(config)) {
