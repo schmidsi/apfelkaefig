@@ -1,10 +1,14 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
+  buildExecArgs,
   buildRunArgs,
   claudeProfileLabel,
+  containerIsRunning,
   ensureVolumes,
   projectImageTag,
   resolveImageRef,
+  sandboxContainerName,
+  tmuxWrap,
 } from "./container.ts";
 import type { Runner } from "./container.ts";
 import type { ResolvedConfig } from "./config.ts";
@@ -115,6 +119,62 @@ Deno.test("buildRunArgs: commandOverride and userOverride replace command and us
   const uIdx = out.args.indexOf("-u");
   assertEquals(out.args[uIdx + 1], "root");
   assert(out.args.includes("-i") && !out.args.includes("-it"), "expected -i without -it");
+});
+
+Deno.test("tmuxWrap: wraps a command in the shared akf session", () => {
+  assertEquals(
+    tmuxWrap(["claude", "--dangerously-skip-permissions"]),
+    ["tmux", "new-session", "-A", "-s", "akf", "claude", "--dangerously-skip-permissions"],
+  );
+});
+
+Deno.test("sandboxContainerName: akf- prefixed project slug", () => {
+  assertEquals(sandboxContainerName("/Users/me/ses.box"), "akf-ses.box");
+  assertEquals(sandboxContainerName("/Users/me/MyProj"), "akf-myproj");
+});
+
+Deno.test("buildExecArgs: attaches to the tmux session over container exec", () => {
+  assertEquals(
+    buildExecArgs("akf-proj", ["claude"], { tty: true }),
+    ["exec", "-it", "akf-proj", "tmux", "new-session", "-A", "-s", "akf", "claude"],
+  );
+  // Non-TTY uses -i.
+  assertEquals(buildExecArgs("akf-proj", ["claude"], { tty: false })[1], "-i");
+});
+
+Deno.test("buildRunArgs: tmux:true wraps the command in a tmux session", () => {
+  const out = buildRunArgs({
+    resolved: resolved({ tmux: true, command: ["claude"] }),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+  });
+  const imgIdx = out.args.indexOf("img");
+  assertEquals(out.args.slice(imgIdx + 1), ["tmux", "new-session", "-A", "-s", "akf", "claude"]);
+});
+
+Deno.test("buildRunArgs: commandOverride bypasses tmux wrapping even when tmux:true", () => {
+  const out = buildRunArgs({
+    resolved: resolved({ tmux: true }),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+    commandOverride: ["/usr/local/bin/akf-sshd"],
+  });
+  assertEquals(out.args.slice(-2), ["img", "/usr/local/bin/akf-sshd"]);
+});
+
+Deno.test("containerIsRunning: matches a running container by name", async () => {
+  const run: Runner = (_cmd, args) => {
+    assertEquals(args.slice(0, 2), ["list", "--format"]);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify([{ id: "akf-proj", image: "img", status: "running" }]),
+      stderr: "",
+    });
+  };
+  assertEquals(await containerIsRunning("akf-proj", run), true);
+  assertEquals(await containerIsRunning("akf-other", run), false);
 });
 
 Deno.test("buildRunArgs: name emits a stable --name for teardown by name", () => {

@@ -574,6 +574,27 @@ Deno.test("effective applies defaults", () => {
   assertEquals(e.user, "node");
   assertEquals(e.command, ["claude", "--dangerously-skip-permissions"]);
   assertEquals(e.resources, { cpus: 2, memory: "4G" });
+  assertEquals(e.tmux, false);
+});
+
+Deno.test("validate accepts tmux as a boolean; effective reflects it", () => {
+  const c = validate({ version: 1, tmux: true });
+  assertEquals(c.tmux, true);
+  const e = effective({
+    source: { kind: "defaults", dir: "/p" },
+    workspaceDir: "/p",
+    config: c,
+    warnings: [],
+  });
+  assertEquals(e.tmux, true);
+});
+
+Deno.test("validate rejects non-boolean tmux", () => {
+  assertThrows(
+    () => validate({ version: 1, tmux: "yes" }),
+    ConfigError,
+    "'tmux' must be a boolean",
+  );
 });
 
 Deno.test("validate accepts claudeConfigDir as a string", () => {

@@ -3,7 +3,7 @@
 // the subprocess; built-in `realRunner` shells out for real.
 
 import { basename } from "@std/path";
-import { type ApfelkaefigConfig, type MountConfig } from "./schema.ts";
+import { type ApfelkaefigConfig, type MountConfig, TMUX_SESSION } from "./schema.ts";
 import { effective, type ResolvedConfig, substitute } from "./config.ts";
 import { pathExistsSync, projectSlug } from "./fs.ts";
 
@@ -159,13 +159,52 @@ export function buildRunArgs(
 
   args.push("-u", input.userOverride ?? e.user, "-w", sub(e.workspaceFolder));
   args.push(input.imageRef);
-  args.push(...(input.commandOverride ?? e.command));
+  // commandOverride (e.g. --serve's sshd) bypasses tmux; otherwise wrap the
+  // agent command in a shared tmux session when tmux is enabled so a second
+  // `akf up` can attach to it via `container exec` (see attachToSession()).
+  const command = input.commandOverride ?? (e.tmux ? tmuxWrap(e.command) : e.command);
+  args.push(...command);
 
   return {
     args,
     workspaceFolder: sub(e.workspaceFolder),
     user: e.user,
   };
+}
+
+// Wrap a command so it runs inside the shared "akf" tmux session. `-A` attaches
+// to the session if it already exists (ignoring the trailing command), so both
+// the initial `container run` and later `container exec` invocations converge on
+// one session.
+export function tmuxWrap(command: string[]): string[] {
+  return ["tmux", "new-session", "-A", "-s", TMUX_SESSION, ...command];
+}
+
+// Stable per-project container name for tmux-multiplexed runs, so a second
+// `akf up` can find the running box and exec into it. Mirrors the `akf-serve-*`
+// naming used by --serve.
+export function sandboxContainerName(workspaceHostPath: string): string {
+  return `akf-${projectSlug(workspaceHostPath)}`;
+}
+
+// True when a container with the given name is currently running.
+export async function containerIsRunning(
+  name: string,
+  run: Runner = realRunner,
+): Promise<boolean> {
+  const list = await listContainers(run);
+  return list.some((c) => c.id === name);
+}
+
+// Build `container exec` argv (minus the leading `container`) to attach a new
+// terminal to the tmux session inside an already-running sandbox.
+export function buildExecArgs(
+  name: string,
+  command: string[],
+  opts: { tty?: boolean } = {},
+): string[] {
+  const wantTty = opts.tty ?? stdinIsTerminal();
+  return ["exec", wantTty ? "-it" : "-i", name, ...tmuxWrap(command)];
 }
 
 // Derive a short uppercase profile label from a custom claudeConfigDir:

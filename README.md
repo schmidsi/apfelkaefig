@@ -66,6 +66,12 @@ Pick the lightest shape that fits; promote when you outgrow it.
   // Default: "~/.claude". Container target stays /home/<user>/.claude.
   // "claudeConfigDir": "~/.claude-work",
 
+  // Run the command inside a shared tmux session so a second `akf up` from
+  // another terminal attaches to the *same* running container instead of
+  // starting a new one. Needs tmux in the image (the built-in base has it).
+  // Default: false.
+  // "tmux": true,
+
   "env": { "TZ": "UTC" },
   "command": ["claude", "--dangerously-skip-permissions"]
 }
@@ -73,6 +79,15 @@ Pick the lightest shape that fits; promote when you outgrow it.
 
 JSONC: comments and trailing commas allowed. Unknown top-level keys are a hard error — promote to
 `.devcontainer/devcontainer.json` (tier 3) when you outgrow the schema.
+
+### Parallel sessions in one container (`tmux`)
+
+With `"tmux": true`, the first `akf up` starts the container and drops you into a tmux session named
+`akf`. Running `akf up` again from another terminal (same project) doesn't start a second box — it
+`container exec`s into the running one and attaches to that session, so every terminal shares the
+same filesystem, volumes, and tools. `Ctrl+B c` opens a new window (another Claude), `Ctrl+B d`
+detaches without stopping the container. The first terminal owns the lifecycle: when it exits, the
+container is torn down.
 
 The no-CLI manual setup lives in [`SKILL.md`](SKILL.md) — a Claude Code skill that drops the same
 scaffold by hand.

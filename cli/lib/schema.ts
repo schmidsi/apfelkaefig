@@ -88,6 +88,10 @@ export interface ApfelkaefigConfig {
   workspaceFolder?: string;
   resources?: ResourcesConfig;
   command?: string | string[];
+  // When true, `akf up` runs the command inside a shared tmux session ("akf")
+  // so a second `akf up` from another terminal attaches to the same running
+  // container instead of starting a new one. Default: false.
+  tmux?: boolean;
   secrets?: SecretsConfig;
   ports?: PortConfig[];
   plugins?: PluginConfigMap;
@@ -103,7 +107,12 @@ export const DEFAULTS = {
   workspaceFolder: "/workspaces/${localWorkspaceFolderBasename}",
   command: ["claude", "--dangerously-skip-permissions"] as string[],
   resources: { cpus: 2, memory: "4G" } as Required<ResourcesConfig>,
+  tmux: false,
 } as const;
+
+// tmux session name shared by all `akf up` sessions for a container. `-A` on
+// new-session attaches to it if it exists, so a second `akf up` reuses it.
+export const TMUX_SESSION = "akf";
 
 // Allowed top-level keys — used by the validator to reject typos.
 export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
@@ -116,6 +125,7 @@ export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "workspaceFolder",
   "resources",
   "command",
+  "tmux",
   "secrets",
   "ports",
   "plugins",

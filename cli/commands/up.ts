@@ -3,7 +3,9 @@
 
 import { builtInImage, materializeEmbeddedDockerfile } from "../lib/baseimage.ts";
 import {
+  buildExecArgs,
   buildRunArgs,
+  containerIsRunning,
   containerVersion,
   ensureContainerSystem,
   ensureVolumes,
@@ -12,10 +14,12 @@ import {
   realRunner,
   resolveImageRef,
   type Runner,
+  sandboxContainerName,
   stopContainer,
 } from "../lib/container.ts";
-import { ConfigError, resolveConfig, substitute } from "../lib/config.ts";
+import { ConfigError, effective, resolveConfig, substitute } from "../lib/config.ts";
 import { projectSlug } from "../lib/fs.ts";
+import { TMUX_SESSION } from "../lib/schema.ts";
 import { resolveOp, SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
 import { runBuild } from "./build.ts";
 
@@ -68,6 +72,30 @@ export async function runUp(opts: UpOptions): Promise<number> {
 
   for (const w of resolved.warnings) console.error(`warning: ${w}`);
 
+  // Ensure the container system is up before we query running containers or run.
+  await ensureContainerSystem(run);
+
+  // tmux multiplexing: when enabled, a second `akf up` from another terminal
+  // should attach to the same running container rather than starting a new one.
+  // (--serve runs sshd, not the agent, so it opts out.)
+  const eff = effective(resolved);
+  const tmuxEnabled = eff.tmux && !opts.serve;
+  let sandboxName: string | undefined;
+  if (tmuxEnabled) {
+    sandboxName = sandboxContainerName(resolved.workspaceDir);
+    if (await containerIsRunning(sandboxName, run)) {
+      console.error(
+        `akf up: attaching to running sandbox '${sandboxName}' ` +
+          `(tmux session '${TMUX_SESSION}'; Ctrl+B c for a new window, Ctrl+B d to detach)…`,
+      );
+      const command = opts.positional.length > 0 ? opts.positional : eff.command;
+      return await spawnInteractive(buildExecArgs(sandboxName, command));
+    }
+    // Clear a stopped orphan of the same name so `container run --name` below
+    // doesn't collide. Safe: only reached when it isn't running.
+    await run("container", ["rm", "-f", sandboxName], { stdout: "null", stderr: "piped" });
+  }
+
   // Resolve the built-in base image. When `image/Dockerfile` is embedded in
   // the binary, materialize it into a content-hashed cache dir so the builder
   // has a build context. AKF_BASE_IMAGE override skips the embedded path.
@@ -82,9 +110,6 @@ export async function runUp(opts: UpOptions): Promise<number> {
     dockerfile: baseDockerfilePath,
   });
   const isBuiltInBuild = resolved.config.image === undefined && image.needsBuild;
-
-  // Ensure container system is up.
-  await ensureContainerSystem(run);
 
   // Image presence check + recovery path. --rebuild forces the build/pull
   // path even when the image is cached — needed when the Dockerfile content
@@ -213,7 +238,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
     commandOverride,
     userOverride,
     tty,
-    name: serveName,
+    name: serveName ?? sandboxName,
   });
 
   // Forward SIGINT so the container exits cleanly. Deno's child inherits the
@@ -244,6 +269,33 @@ export async function runUp(opts: UpOptions): Promise<number> {
   try {
     const status = await child.status;
     return status.code;
+  } finally {
+    try {
+      Deno.removeSignalListener("SIGINT", onSig);
+    } catch (_) { /* ignore */ }
+  }
+}
+
+// Spawn `container <args>` with inherited stdio (interactive TTY) and forward
+// SIGINT to the child. Used by the tmux attach path (`container exec`).
+async function spawnInteractive(args: string[]): Promise<number> {
+  const cmd = new Deno.Command("container", {
+    args,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const child = cmd.spawn();
+  const onSig = () => {
+    try {
+      child.kill("SIGINT");
+    } catch (_) {
+      // Already exited.
+    }
+  };
+  Deno.addSignalListener("SIGINT", onSig);
+  try {
+    return (await child.status).code;
   } finally {
     try {
       Deno.removeSignalListener("SIGINT", onSig);

@@ -122,6 +122,9 @@ export function validate(value: unknown, sourcePath?: string): ApfelkaefigConfig
     validateResources(obj.resources, sourcePath);
   }
   if ("command" in obj && obj.command !== undefined) validateCommand(obj.command, sourcePath);
+  if ("tmux" in obj && obj.tmux !== undefined && typeof obj.tmux !== "boolean") {
+    throw new ConfigError("'tmux' must be a boolean", sourcePath);
+  }
   if ("secrets" in obj && obj.secrets !== undefined) validateSecrets(obj.secrets, sourcePath);
   if ("ports" in obj && obj.ports !== undefined) validatePorts(obj.ports, sourcePath);
   if ("plugins" in obj && obj.plugins !== undefined) validatePlugins(obj.plugins, sourcePath);
@@ -499,6 +502,7 @@ export function effective(resolved: ResolvedConfig): {
   command: string[];
   resources: { cpus: number; memory: string };
   claudeConfigDir?: string;
+  tmux: boolean;
 } {
   const c = resolved.config;
   const cmd = c.command === undefined
@@ -515,5 +519,6 @@ export function effective(resolved: ResolvedConfig): {
       memory: c.resources?.memory ?? DEFAULTS.resources.memory,
     },
     claudeConfigDir: c.claudeConfigDir,
+    tmux: c.tmux ?? DEFAULTS.tmux,
   };
 }
