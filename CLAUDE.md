@@ -33,6 +33,14 @@ for themselves.
   `.gitignore`.
 - **Never touch `settings.local.json`** from `akf init` — `--dangerously-skip-permissions` makes it
   dead config, and merging into it breaks user edits.
+- **Minimal core, powerful plugins.** New capabilities and run-behaviors go into plugins
+  (`cli/plugins/`), not into `up.ts`/`main.ts` branches. Core stays orchestration. See
+  `tasks/011_plugin_runtime_hooks.md` for the hook interface and settled design decisions.
+- **No speculative extension points.** Add a hook, flag, or config key only when a concrete
+  consumer needs it — never "for later." This applies doubly to the plugin interface.
+- **Plugins are built-in and compiled-in.** No dynamic loading, no third-party plugins — arbitrary
+  code with run-lifecycle powers in a sandboxing tool is a trust problem. Revisit only on concrete
+  external demand.
 
 ## Where things live
 
