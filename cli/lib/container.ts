@@ -198,13 +198,28 @@ export async function containerIsRunning(
 
 // Build `container exec` argv (minus the leading `container`) to attach a new
 // terminal to the tmux session inside an already-running sandbox.
+//
+// Unlike `container run`, Apple `container exec` does NOT apply the image's
+// `ENV PATH`, so a bare `tmux` fails with "failed to find target executable
+// tmux" even when it's installed (same PATH-stripping the ssh plugin works
+// around for `claude`). Route through `/bin/sh -c` with an explicit PATH that
+// covers the usual install locations so the binary resolves regardless.
+const EXEC_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$HOME/.local/bin";
+
 export function buildExecArgs(
   name: string,
   command: string[],
   opts: { tty?: boolean } = {},
 ): string[] {
   const wantTty = opts.tty ?? stdinIsTerminal();
-  return ["exec", wantTty ? "-it" : "-i", name, ...tmuxWrap(command)];
+  const inner = `PATH="${EXEC_PATH}:$PATH" exec ${tmuxWrap(command).map(shQuote).join(" ")}`;
+  return ["exec", wantTty ? "-it" : "-i", name, "/bin/sh", "-c", inner];
+}
+
+// Minimal POSIX shell single-quote: wrap in '…' and escape embedded quotes.
+// Enough for the agent command tokens we pass through tmux.
+function shQuote(s: string): string {
+  return `'${s.replaceAll("'", "'\\''")}'`;
 }
 
 // Derive a short uppercase profile label from a custom claudeConfigDir:

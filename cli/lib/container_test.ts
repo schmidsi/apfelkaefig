@@ -133,10 +133,16 @@ Deno.test("sandboxContainerName: akf- prefixed project slug", () => {
   assertEquals(sandboxContainerName("/Users/me/MyProj"), "akf-myproj");
 });
 
-Deno.test("buildExecArgs: attaches to the tmux session over container exec", () => {
-  assertEquals(
-    buildExecArgs("akf-proj", ["claude"], { tty: true }),
-    ["exec", "-it", "akf-proj", "tmux", "new-session", "-A", "-s", "akf", "claude"],
+Deno.test("buildExecArgs: attaches over container exec via a shell with explicit PATH", () => {
+  const args = buildExecArgs("akf-proj", ["claude"], { tty: true });
+  assertEquals(args.slice(0, 5), ["exec", "-it", "akf-proj", "/bin/sh", "-c"]);
+  // container exec doesn't inherit the image PATH, so tmux is resolved via an
+  // explicit PATH prefix; the tmux invocation is shell-quoted.
+  const inner = args[5];
+  assert(inner.startsWith('PATH="/usr/local/sbin:'), `unexpected inner: ${inner}`);
+  assert(
+    inner.includes("exec 'tmux' 'new-session' '-A' '-s' 'akf' 'claude'"),
+    `unexpected inner: ${inner}`,
   );
   // Non-TTY uses -i.
   assertEquals(buildExecArgs("akf-proj", ["claude"], { tty: false })[1], "-i");
