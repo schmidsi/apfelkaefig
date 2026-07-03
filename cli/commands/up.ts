@@ -89,7 +89,9 @@ export async function runUp(opts: UpOptions): Promise<number> {
           `(tmux session '${TMUX_SESSION}'; Ctrl+B c for a new window, Ctrl+B d to detach)…`,
       );
       const command = opts.positional.length > 0 ? opts.positional : eff.command;
-      return await spawnInteractive(buildExecArgs(sandboxName, command));
+      const execArgs = buildExecArgs(sandboxName, command);
+      debugCmd(execArgs);
+      return await spawnInteractive(execArgs);
     }
     // Clear a stopped orphan of the same name so `container run --name` below
     // doesn't collide. Safe: only reached when it isn't running.
@@ -241,6 +243,8 @@ export async function runUp(opts: UpOptions): Promise<number> {
     name: serveName ?? sandboxName,
   });
 
+  debugCmd(built.args);
+
   // Forward SIGINT so the container exits cleanly. Deno's child inherits the
   // pty when we use stdin: "inherit"; spawning lets us also handle signals.
   const cmd = new Deno.Command("container", {
@@ -273,6 +277,15 @@ export async function runUp(opts: UpOptions): Promise<number> {
     try {
       Deno.removeSignalListener("SIGINT", onSig);
     } catch (_) { /* ignore */ }
+  }
+}
+
+// Print the exact `container` invocation when AKF_DEBUG is set. Volume/mount
+// bootstrap failures (e.g. "storage device attachment is invalid") are opaque
+// without seeing the actual -v flags akf generated.
+function debugCmd(args: string[]): void {
+  if (Deno.env.get("AKF_DEBUG")) {
+    console.error(`akf debug: container ${args.join(" ")}`);
   }
 }
 
