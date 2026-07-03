@@ -6,7 +6,7 @@
     "fmt": "deno fmt",
     "lint": "deno lint",
     "check": "deno check cli/main.ts",
-    "compile": "deno compile -A --target aarch64-apple-darwin --include ./templates --include ./image --include ./deno.json --output dist/akf cli/main.ts"
+    "compile": "deno run --allow-run --allow-read --allow-write scripts/stamp-build.ts && deno compile -A --target aarch64-apple-darwin --include ./templates --include ./image --include ./deno.json --include ./cli/build_info.json --output dist/akf cli/main.ts"
   },
   "imports": {
     "@std/cli": "jsr:@std/cli@^1.0.9",
