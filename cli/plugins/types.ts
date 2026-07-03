@@ -44,8 +44,24 @@ export interface RunContext {
   run: Runner;
 }
 
+// How a preRun hook reshapes the `container run` invocation. Exclusive: two
+// plugins returning overrides in one run is a plugin-author error.
+export interface RunOverrides {
+  // Replace the in-container command wholesale. A replacement also suppresses
+  // all wrapCommand hooks (replacement beats wrapping — e.g. --serve's sshd
+  // must not be tmux-wrapped).
+  command?: string[];
+  // Run as this user (`-u`).
+  user?: string;
+  // Force TTY allocation on/off.
+  tty?: boolean;
+  // On Ctrl+C, stop the container by its claimed name instead of signalling
+  // the child — Apple `container`'s non-TTY signal relay drops SIGINT.
+  stopByNameOnInterrupt?: boolean;
+}
+
 export type PreRunResult =
-  | { action: "continue" }
+  | { action: "continue"; overrides?: RunOverrides }
   | { action: "exit"; code: number }
   // Hand the terminal over to `container <args>` instead of `container run`.
   | { action: "attach"; args: string[] };
@@ -98,6 +114,8 @@ export interface BuiltInPlugin {
   runtimeEnv?: (ctx: RunContext) => Promise<Record<string, string>>;
   // Compose-wrap the in-container command. Applied in config-file order.
   wrapCommand?: (command: string[], ctx: RunContext) => string[];
-  // Exclusive: stable container name for this run. Two claimants → hard error.
-  containerName?: (ctx: RunContext) => string;
+  // Exclusive: stable container name for this run, or undefined to make no
+  // claim under the current ctx (e.g. ssh claims only in --serve mode). Two
+  // non-undefined claims in one run → hard error.
+  containerName?: (ctx: RunContext) => string | undefined;
 }

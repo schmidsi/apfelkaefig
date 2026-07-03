@@ -6,6 +6,7 @@ import {
   type PluginDoctorCheck,
   type PreRunResult,
   type RunContext,
+  type RunOverrides,
   type SetupStep,
 } from "../plugins/types.ts";
 import { onePasswordPlugin } from "../plugins/1password/plugin.ts";
@@ -20,6 +21,7 @@ export type {
   PluginDoctorCheck,
   PreRunResult,
   RunContext,
+  RunOverrides,
   SetupStep,
 };
 

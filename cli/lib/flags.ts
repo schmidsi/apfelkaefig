@@ -14,7 +14,14 @@ export const INTERNAL_PLUGINS: BuiltInPlugin[] = [tmuxPlugin];
 
 // Boolean flags `akf up` owns itself. Plugin-declared flags must not collide
 // with these or with each other.
-const CORE_UP_FLAGS = ["rebuild", "serve", "image", "help", "h"];
+const CORE_UP_FLAGS = ["rebuild", "image", "help", "h"];
+
+// The plugin (public or internal) that declared the given `akf up` flag, or
+// undefined for core flags. runUp uses this to reject a flag whose owning
+// plugin isn't active for the run (e.g. --serve without the ssh plugin).
+export function pluginOwningFlag(flag: string): BuiltInPlugin | undefined {
+  return [...listPlugins(), ...INTERNAL_PLUGINS].find((p) => (p.flags ?? []).includes(flag));
+}
 
 // All `akf up` flags declared by plugins (public + internal), for the arg
 // parser to accept generically.

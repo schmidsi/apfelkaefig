@@ -484,28 +484,9 @@ function parseDevcontainerMount(s: string): MountConfig | null {
   return m;
 }
 
-// Substitute ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename},
-// ${devcontainerId}. Same dialect as devcontainer.json. ${devcontainerId} is the
-// spec's stable per-project id (commonly used in named-volume sources); we resolve
-// it to the project slug so it matches the volume-name regex and stays consistent
-// with akf's image tag (`<slug>-sandbox`).
-export function substitute(
-  s: string,
-  ctx: { workspaceFolder: string; env?: Record<string, string | undefined> },
-): string {
-  const env = ctx.env ?? Deno.env.toObject();
-  const basename = ctx.workspaceFolder.split("/").filter(Boolean).pop() ?? "";
-
-  let out = s;
-  out = out.replace(
-    /\$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\}/g,
-    (_, name) => env[name] ?? "",
-  );
-  out = out.replaceAll("${localWorkspaceFolder}", ctx.workspaceFolder);
-  out = out.replaceAll("${localWorkspaceFolderBasename}", basename);
-  out = out.replaceAll("${devcontainerId}", projectSlug(ctx.workspaceFolder));
-  return out;
-}
+// Re-exported from substitute.ts (moved there so plugins can import it
+// without a cycle through this module); call sites keep importing from here.
+export { substitute } from "./substitute.ts";
 
 // Compute the effective values used by `up` after applying defaults.
 export function effective(resolved: ResolvedConfig): {

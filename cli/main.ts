@@ -135,7 +135,7 @@ export function parseUpArgs(rest: string[]): UpArgs {
   // asserted at registry construction — see assertFlagUniqueness).
   const flags = parseArgs(rest, {
     string: ["image"],
-    boolean: ["rebuild", "serve", "help", ...allUpPluginFlags()],
+    boolean: ["rebuild", "help", ...allUpPluginFlags()],
     alias: { h: "help" },
     "--": true,
     unknown: (arg, key) => {

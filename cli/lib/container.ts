@@ -4,7 +4,8 @@
 
 import { basename } from "@std/path";
 import { type ApfelkaefigConfig, type MountConfig } from "./schema.ts";
-import { effective, type ResolvedConfig, substitute } from "./config.ts";
+import { effective, type ResolvedConfig } from "./config.ts";
+import { expandHome, substitute } from "./substitute.ts";
 import { pathExistsSync, projectSlug } from "./fs.ts";
 
 export type CmdResult = { code: number; stdout: string; stderr: string };
@@ -236,15 +237,6 @@ export function claudeProfileLabel(dir: string): string {
     ? name.slice(".claude-".length)
     : name.replace(/^\./, "");
   return stripped.toUpperCase();
-}
-
-// Expand a leading `~` or `~/` to the host home dir. Mid-path tildes are
-// left alone — they're not a shell glob target here.
-function expandHome(p: string, home: string): string {
-  if (!home) return p;
-  if (p === "~") return home;
-  if (p.startsWith("~/")) return `${home}/${p.slice(2)}`;
-  return p;
 }
 
 function pushMountIfExists(

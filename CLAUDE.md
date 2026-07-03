@@ -115,6 +115,7 @@ host key persists across runs so reconnects don't trip `known_hosts`.
   — `~/.claude/remote` landed on virtiofs (the host mount), which rejects chmod on
   socket inodes. A native named volume shadows that subdir to fix it.
 
-Diagnose from the host with `container logs akf-serve-<projectSlug>` (sshd auth)
-and, inside the box, `~/.claude/remote/run/<id>/remote-server.log` (daemon).
+Diagnose from the host with `container logs <container>` — the container name
+is printed in the `akf up --serve` banner — and, inside the box,
+`~/.claude/remote/run/<id>/remote-server.log` (daemon).
 <!-- akf plugin: ssh end -->

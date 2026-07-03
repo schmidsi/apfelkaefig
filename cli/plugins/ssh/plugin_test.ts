@@ -134,3 +134,114 @@ Deno.test("ssh doctorChecks: fails when the authorized key is missing", async ()
   const keyCheck = checks.find((c) => c.label === "ssh key");
   assertEquals(keyCheck?.severity, "fail");
 });
+
+// --- run hooks (--serve) ---
+
+import { withTmpDir } from "../../lib/test_util.ts";
+import type { RunContext } from "../types.ts";
+import type { Runner } from "../../lib/container.ts";
+
+function runCtx(
+  overrides: Partial<RunContext> & { run: Runner },
+): RunContext {
+  return {
+    config: { version: 1 },
+    workspaceDir: "/Users/me/myproj",
+    command: ["claude"],
+    flags: {},
+    ...overrides,
+  };
+}
+
+const noopRun: Runner = () => Promise.resolve({ code: 0, stdout: "", stderr: "" });
+
+Deno.test("ssh containerName: claims only in --serve mode, with a path hash", () => {
+  assertEquals(sshPlugin.containerName!(runCtx({ run: noopRun })), undefined);
+  const name = sshPlugin.containerName!(runCtx({ run: noopRun, flags: { serve: true } }));
+  assert(name && /^akf-serve-myproj-[0-9a-f]{8}$/.test(name), `unexpected name: ${name}`);
+  // Same basename, different path → different serve box name.
+  const other = sshPlugin.containerName!(
+    runCtx({ run: noopRun, flags: { serve: true }, workspaceDir: "/Users/me/oss/myproj" }),
+  );
+  assert(name !== other, "same-basename projects collided on serve container name");
+});
+
+Deno.test("ssh preRun: no-op without the serve flag", async () => {
+  const result = await sshPlugin.preRun!(runCtx({ run: noopRun }));
+  assertEquals(result, { action: "continue" });
+});
+
+Deno.test("ssh preRun: missing authorized key exits 1", async () => {
+  await withTmpDir(async (dir) => {
+    const result = await sshPlugin.preRun!(runCtx({
+      run: noopRun,
+      workspaceDir: dir,
+      flags: { serve: true },
+      config: {
+        version: 1,
+        plugins: {
+          ssh: { enabled: true, authorizedKey: `${dir}/nope.pub`, port: 2222 },
+        },
+      },
+    }));
+    assertEquals(result, { action: "exit", code: 1 });
+  });
+});
+
+Deno.test("ssh preRun: serve clears the orphan and returns run overrides", async () => {
+  await withTmpDir(async (dir) => {
+    const keyPath = `${dir}/key.pub`;
+    await Deno.writeTextFile(keyPath, "ssh-ed25519 AAAA test@host\n");
+    const calls: string[][] = [];
+    const run: Runner = (_cmd, args) => {
+      calls.push(args);
+      return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+    };
+    const c = runCtx({
+      run,
+      workspaceDir: dir,
+      flags: { serve: true },
+      config: {
+        version: 1,
+        plugins: { ssh: { enabled: true, authorizedKey: keyPath, port: 2222 } },
+      },
+    });
+    const result = await sshPlugin.preRun!(c);
+    assert(result.action === "continue", `expected continue, got ${result.action}`);
+    assertEquals(result.overrides, {
+      command: ["/usr/local/bin/akf-sshd"],
+      user: "root",
+      tty: false,
+      stopByNameOnInterrupt: true,
+    });
+    const rm = calls.find((a) => a[0] === "rm");
+    assertEquals(rm, ["rm", "-f", sshPlugin.containerName!(c)!]);
+  });
+});
+
+Deno.test("ssh runtimeEnv: injects the authorized key in serve mode only", async () => {
+  await withTmpDir(async (dir) => {
+    const keyPath = `${dir}/key.pub`;
+    await Deno.writeTextFile(keyPath, "ssh-ed25519 AAAA test@host\n");
+    const config = {
+      version: 1 as const,
+      plugins: { ssh: { enabled: true, authorizedKey: keyPath, port: 2222 } },
+    };
+    assertEquals(
+      await sshPlugin.runtimeEnv!(runCtx({ run: noopRun, workspaceDir: dir, config })),
+      {},
+    );
+    assertEquals(
+      await sshPlugin.runtimeEnv!(
+        runCtx({ run: noopRun, workspaceDir: dir, config, flags: { serve: true } }),
+      ),
+      { AKF_SSH_AUTHORIZED_KEY: "ssh-ed25519 AAAA test@host" },
+    );
+  });
+});
+
+Deno.test("resolveKeyPath: leading ~ expands like the run path now", () => {
+  const home = Deno.env.get("HOME") ?? "";
+  assertEquals(resolveKeyPath("~/x.pub"), `${home}/x.pub`);
+  assertEquals(resolveKeyPath("${localEnv:HOME}/x.pub"), `${home}/x.pub`);
+});
