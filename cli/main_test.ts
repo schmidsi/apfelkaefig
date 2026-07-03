@@ -24,6 +24,7 @@ Deno.test("parseUpArgs: known flags and positionals pass through", () => {
     imageOverride: "foo:latest",
     rebuild: true,
     serve: false,
+    tmux: false,
   });
 });
 
@@ -35,6 +36,7 @@ Deno.test("parseUpArgs: flags after -- are forwarded to the command", () => {
     imageOverride: undefined,
     rebuild: false,
     serve: false,
+    tmux: false,
   });
 });
 
@@ -46,6 +48,19 @@ Deno.test("parseUpArgs: no args runs with empty positionals", () => {
     imageOverride: undefined,
     rebuild: false,
     serve: false,
+    tmux: false,
+  });
+});
+
+Deno.test("parseUpArgs: --tmux sets tmux and is not a positional", () => {
+  const parsed = parseUpArgs(["--tmux"]);
+  assertEquals(parsed, {
+    kind: "run",
+    positional: [],
+    imageOverride: undefined,
+    rebuild: false,
+    serve: false,
+    tmux: true,
   });
 });
 
@@ -57,5 +72,6 @@ Deno.test("parseUpArgs: --serve sets serve and is not a positional", () => {
     imageOverride: undefined,
     rebuild: false,
     serve: true,
+    tmux: false,
   });
 });

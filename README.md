@@ -82,12 +82,18 @@ JSONC: comments and trailing commas allowed. Unknown top-level keys are a hard e
 
 ### Parallel sessions in one container (`tmux`)
 
-With `"tmux": true`, the first `akf up` starts the container and drops you into a tmux session named
-`akf`. Running `akf up` again from another terminal (same project) doesn't start a second box — it
-`container exec`s into the running one and attaches to that session, so every terminal shares the
-same filesystem, volumes, and tools. `Ctrl+B c` opens a new window (another Claude), `Ctrl+B d`
-detaches without stopping the container. The first terminal owns the lifecycle: when it exits, the
-container is torn down.
+With `"tmux": true` (or the `akf up --tmux` flag — handy for tier-3 `devcontainer.json` projects that
+can't set the config key), the first `akf up` starts the container and drops you into a tmux session
+named `akf`. Running `akf up --tmux` again from another terminal (same project) doesn't start a
+second box — it `container exec`s into the running one and attaches to that session, so every terminal
+shares the same filesystem, volumes, and tools. `Ctrl+B c` opens a new window (another Claude),
+`Ctrl+B d` detaches without stopping the container. The first terminal owns the lifecycle: when it
+exits, the container is torn down.
+
+This matters most for projects with **named-volume mounts** (e.g. a devcontainer that persists bash
+history or `~/.claude` in a volume): Apple `container` attaches a named volume to only one running VM
+at a time, so a plain second `akf up` would fail to bootstrap. tmux mode is the fix — it reuses the
+one container instead of starting a rival that can't claim the volumes.
 
 The no-CLI manual setup lives in [`SKILL.md`](SKILL.md) — a Claude Code skill that drops the same
 scaffold by hand.

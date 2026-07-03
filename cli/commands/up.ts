@@ -10,6 +10,7 @@ import {
   ensureContainerSystem,
   ensureVolumes,
   imageExists,
+  listContainers,
   pullImage,
   realRunner,
   resolveImageRef,
@@ -37,6 +38,10 @@ export interface UpOptions {
   // Run sshd in the foreground instead of the agent, so the desktop apps can
   // attach over SSH. Requires the `ssh` plugin. Ctrl+C stops it.
   serve?: boolean;
+  // Force tmux multiplexing on regardless of config (`akf up --tmux`), so a
+  // second `akf up` attaches to the running container. undefined defers to the
+  // resolved config's `tmux`.
+  tmux?: boolean;
   run?: Runner;
 }
 
@@ -79,7 +84,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
   // should attach to the same running container rather than starting a new one.
   // (--serve runs sshd, not the agent, so it opts out.)
   const eff = effective(resolved);
-  const tmuxEnabled = eff.tmux && !opts.serve;
+  const tmuxEnabled = (opts.tmux ?? eff.tmux) && !opts.serve;
   let sandboxName: string | undefined;
   if (tmuxEnabled) {
     sandboxName = sandboxContainerName(resolved.workspaceDir);
@@ -230,6 +235,33 @@ export async function runUp(opts: UpOptions): Promise<number> {
         `         Identity: the private key matching ${keyPath}\n` +
         `       logs follow; Ctrl+C to stop.`,
     );
+  }
+
+  // Apple `container` named volumes attach to one running VM at a time. If this
+  // project mounts named volumes and another container off the same image is
+  // already running, starting a new box fails with the opaque "storage device
+  // attachment is invalid". Detect that up front and explain (tmux mode is the
+  // fix; a leftover non-tmux box just needs removing). Skipped for --serve,
+  // which runs its own named box and clears its own orphan by name above.
+  if (!opts.serve && (resolved.config.mounts ?? []).some((m) => m.type === "volume")) {
+    const sameImage = (a: string, b: string) =>
+      a.replace(/:latest$/, "") === b.replace(/:latest$/, "");
+    const orphan = (await listContainers(run)).find(
+      (c) => sameImage(c.image, image.ref) && c.id !== sandboxName,
+    );
+    if (orphan) {
+      const shareHint = tmuxEnabled
+        ? `         (it predates tmux mode, so this run can't attach to it.)\n`
+        : `         • run \`akf up --tmux\` to share that box across terminals, or\n`;
+      console.error(
+        `akf up: another sandbox for this project is already running ` +
+          `(${orphan.id}, image ${orphan.image}). It holds the project's shared ` +
+          `named volumes, which attach to one container at a time. Either:\n` +
+          shareHint +
+          `         • stop it — \`container rm -f ${orphan.id}\` (or \`akf clean\`) — then retry.`,
+      );
+      return 1;
+    }
   }
 
   const built = buildRunArgs({

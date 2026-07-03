@@ -13,12 +13,15 @@ import denoJson from "../deno.json" with { type: "json" };
 const USAGE = `akf — dev sandboxes on Apple container (der Käfer im Apfel)
 
 Usage:
-  akf up [--rebuild] [--image <ref>] [--serve] [-- cmd args…]
+  akf up [--rebuild] [--image <ref>] [--serve] [--tmux] [-- cmd args…]
                            Launch the sandbox (built-in image if no config).
                            --rebuild forces an image rebuild/refresh.
                            --image overrides the image for this run.
                            --serve runs sshd in the foreground so desktop
                            agents can attach over SSH (requires the ssh plugin).
+                           --tmux shares one container across terminals: a second
+                           'akf up --tmux' attaches to the running box's tmux
+                           session instead of starting a new one.
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
   akf plugin list|explain|add
@@ -110,13 +113,14 @@ export type UpArgs =
     imageOverride?: string;
     rebuild: boolean;
     serve: boolean;
+    tmux: boolean;
   };
 
 export function parseUpArgs(rest: string[]): UpArgs {
   let unknownFlag: string | undefined;
   const flags = parseArgs(rest, {
     string: ["image"],
-    boolean: ["rebuild", "serve", "help"],
+    boolean: ["rebuild", "serve", "tmux", "help"],
     alias: { h: "help" },
     "--": true,
     unknown: (arg, key) => {
@@ -138,6 +142,7 @@ export function parseUpArgs(rest: string[]): UpArgs {
     imageOverride: flags.image,
     rebuild: flags.rebuild,
     serve: flags.serve,
+    tmux: flags.tmux,
   };
 }
 
@@ -157,6 +162,8 @@ async function dispatchUp(rest: string[]): Promise<number> {
     imageOverride: parsed.imageOverride,
     rebuild: parsed.rebuild,
     serve: parsed.serve,
+    // Presence forces tmux on; absence leaves the config's `tmux` in charge.
+    tmux: parsed.tmux ? true : undefined,
   });
 }
 
