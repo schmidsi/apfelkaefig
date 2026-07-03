@@ -2,14 +2,18 @@
 
 ## Status
 
-- **Done:** step 1 (runtime resolution — `transformConfig` applied in `resolveConfig`, `withPlugin`
-  writes only the plugins section, this repo's own config de-materialized), the flag-ownership
-  mechanism from step 5 (`flags` declaration, `cli/lib/flags.ts` collision check + unit tests), and
-  step 6 (tmux internal plugin with `preRun`/`wrapCommand`/`containerName`, container-name path-hash
-  fix, `--serve` name hash fix).
-- **Open:** step 2 (machine-owned blocks + `akf plugin sync`), step 3 (leftover auto-migration in
-  `akf up`), step 4 (1Password `runtimeEnv`), the rest of step 5 (move `--serve` into the ssh
-  plugin), step 7 (schema generation).
+**All seven implementation steps are done.** Deviations from the letter of the plan, chosen while
+implementing:
+
+- Marker blocks did NOT gain a version in the start marker (decision 10) — changing the marker
+  text would orphan existing blocks, and content comparison alone already answers "does this need
+  a re-render". The ownership contract is stated in a comment line inside each block instead.
+- The serve-beats-tmux rule stayed as one line of core sugar (`tmuxEnabled … && !opts.serve`)
+  rather than plugin-declared exclusivity (decision 7) — expressing it in the ssh plugin would
+  couple the two plugins for no consumer benefit. Command *replacement* suppressing `wrapCommand`
+  hooks is generic, via `PreRunResult.overrides`.
+- JSONC configs are never rewritten by the auto-migration (a JSON round-trip would destroy
+  comments); they get an advisory note listing the removable entries instead.
 
 ## Context
 
