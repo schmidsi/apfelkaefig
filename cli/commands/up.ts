@@ -25,6 +25,7 @@ import {
   runAuthWizard,
 } from "../lib/claude_creds.ts";
 import { ConfigError, effective, resolveConfig, substitute } from "../lib/config.ts";
+import { migrateMaterializedConfig } from "../lib/migrate.ts";
 import { djb2Hex, projectSlug } from "../lib/fs.ts";
 import { type BuiltInPlugin, getPlugin, type PluginId, type RunContext } from "../lib/plugins.ts";
 import { tmuxPlugin } from "../plugins/tmux/plugin.ts";
@@ -83,6 +84,32 @@ export async function runUp(opts: UpOptions): Promise<number> {
   }
 
   for (const w of resolved.warnings) console.error(`warning: ${w}`);
+
+  // Self-heal configs that predate resolve-time plugin transforms (tasks/011):
+  // strip materialized entries the plugins now derive. Behavior is unchanged
+  // either way (runtime dedupe), so a migration failure must never block up.
+  if (resolved.source.kind === "apfelkaefig") {
+    try {
+      const migration = await migrateMaterializedConfig({
+        configPath: resolved.source.path,
+        workspaceDir: resolved.workspaceDir,
+      });
+      if (migration?.rewritten) {
+        console.error(
+          `akf up: updated .apfelkaefig.json — removed ${migration.removed.length} ` +
+            `entr${migration.removed.length === 1 ? "y" : "ies"} now derived by plugins ` +
+            `(backup: ${migration.backupPath})`,
+        );
+      } else if (migration) {
+        console.error(
+          `akf up: note — these .apfelkaefig.json entries are now derived by plugins ` +
+            `and can be removed: ${migration.removed.join(", ")}`,
+        );
+      }
+    } catch (err) {
+      console.error(`warning: config migration check failed: ${(err as Error).message}`);
+    }
+  }
 
   // Ensure the container system is up before we query running containers or run.
   await ensureContainerSystem(run);
