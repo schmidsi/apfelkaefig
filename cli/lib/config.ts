@@ -10,7 +10,7 @@ import {
   VOLUME_NAME_RE,
 } from "./schema.ts";
 import { listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
-import { pathExists } from "./fs.ts";
+import { pathExists, projectSlug } from "./fs.ts";
 
 export type ConfigSource =
   | { kind: "apfelkaefig"; path: string; dir: string; raw: ApfelkaefigConfig }
@@ -469,8 +469,11 @@ function parseDevcontainerMount(s: string): MountConfig | null {
   return m;
 }
 
-// Substitute ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}.
-// Same dialect as devcontainer.json.
+// Substitute ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename},
+// ${devcontainerId}. Same dialect as devcontainer.json. ${devcontainerId} is the
+// spec's stable per-project id (commonly used in named-volume sources); we resolve
+// it to the project slug so it matches the volume-name regex and stays consistent
+// with akf's image tag (`<slug>-sandbox`).
 export function substitute(
   s: string,
   ctx: { workspaceFolder: string; env?: Record<string, string | undefined> },
@@ -485,6 +488,7 @@ export function substitute(
   );
   out = out.replaceAll("${localWorkspaceFolder}", ctx.workspaceFolder);
   out = out.replaceAll("${localWorkspaceFolderBasename}", basename);
+  out = out.replaceAll("${devcontainerId}", projectSlug(ctx.workspaceFolder));
   return out;
 }
 

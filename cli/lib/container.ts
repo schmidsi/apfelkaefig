@@ -107,9 +107,11 @@ export function buildRunArgs(
   for (const m of c.mounts ?? []) {
     const tgt = sub(m.target);
     if (m.type === "volume") {
-      // Volume name is literal — no substitution, no host-path check. The
-      // volume itself is created by ensureVolumes() before `container run`.
-      pushMount(m.source, tgt, !!m.readonly);
+      // Volume name: no host-path check. akf-native configs forbid ${...} in
+      // volume sources (so sub() is a no-op there); devcontainer.json is allowed
+      // ${devcontainerId} etc., which sub() resolves. Must match the name
+      // ensureVolumes() created before `container run`.
+      pushMount(sub(m.source), tgt, !!m.readonly);
       continue;
     }
     const src = sub(m.source);
@@ -242,20 +244,24 @@ export function resolveImageRef(
 export async function ensureVolumes(
   mounts: MountConfig[] | undefined,
   run: Runner = realRunner,
+  subCtx?: { workspaceFolder: string; env?: Record<string, string | undefined> },
 ): Promise<void> {
   if (!mounts) return;
   const seen = new Set<string>();
   for (const m of mounts) {
     if (m.type !== "volume") continue;
-    if (seen.has(m.source)) continue;
-    seen.add(m.source);
-    const r = await run("container", ["volume", "create", m.source], {
+    // Resolve devcontainer.json variables (${devcontainerId}, …) so the created
+    // volume name matches the one buildRunArgs() passes to `-v`.
+    const name = subCtx ? substitute(m.source, subCtx) : m.source;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const r = await run("container", ["volume", "create", name], {
       stdout: "null",
       stderr: "piped",
     });
     if (r.code !== 0 && !/exist/i.test(r.stderr)) {
       throw new Error(
-        `failed to create volume '${m.source}' (exit ${r.code}): ${r.stderr.trim()}`,
+        `failed to create volume '${name}' (exit ${r.code}): ${r.stderr.trim()}`,
       );
     }
   }

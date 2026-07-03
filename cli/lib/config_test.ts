@@ -546,6 +546,16 @@ Deno.test("substitute resolves localEnv and workspace placeholders", () => {
   assertEquals(out, "/Users/me/proj/x proj bar");
 });
 
+Deno.test("substitute resolves ${devcontainerId} to the project slug", () => {
+  // Dots and other non-slug chars in the folder name are normalized, so the
+  // result is a valid Apple `container` volume name.
+  const out = substitute("claude-code-bashhistory-${devcontainerId}", {
+    workspaceFolder: "/Users/schmidsi/Repos/@schmidsi/ses.box",
+    env: {},
+  });
+  assertEquals(out, "claude-code-bashhistory-ses.box");
+});
+
 Deno.test("substitute leaves unknown localEnv vars empty", () => {
   const out = substitute("[${localEnv:NOPE}]", {
     workspaceFolder: "/p",

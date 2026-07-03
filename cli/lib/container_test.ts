@@ -465,6 +465,22 @@ Deno.test("ensureVolumes: dedupes by name, skips bind mounts", async () => {
   assertEquals(calls[1].args, ["volume", "create", "v2"]);
 });
 
+Deno.test("ensureVolumes: resolves ${devcontainerId} in the volume name", async () => {
+  const calls: { cmd: string; args: string[] }[] = [];
+  const run: Runner = (cmd, args) => {
+    calls.push({ cmd, args });
+    return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+  };
+  await ensureVolumes(
+    [{ type: "volume", source: "claude-code-bashhistory-${devcontainerId}", target: "/x" }],
+    run,
+    { workspaceFolder: "/Users/me/ses.box", env: {} },
+  );
+  assertEquals(calls, [
+    { cmd: "container", args: ["volume", "create", "claude-code-bashhistory-ses.box"] },
+  ]);
+});
+
 Deno.test("ensureVolumes: surfaces real failures (non-'exists' stderr)", async () => {
   const run: Runner = () => Promise.resolve({ code: 1, stdout: "", stderr: "permission denied" });
   await assertRejects(
