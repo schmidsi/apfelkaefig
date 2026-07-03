@@ -1,7 +1,19 @@
 import { assert, assertEquals } from "@std/assert";
+import { join } from "@std/path";
 import { runBuild } from "./build.ts";
-import { builtInImage } from "../lib/baseimage.ts";
+import { builtInImage, sandboxStamp } from "../lib/baseimage.ts";
+import { STAMP_LABEL } from "../lib/container.ts";
 import type { CmdResult, Runner } from "../lib/container.ts";
+import { withTmpDir } from "../lib/test_util.ts";
+
+// Write a throwaway Dockerfile under `dir` so runBuild can read it to compute
+// the image stamp, and return its path.
+async function writeDockerfile(dir: string, rel = ".devcontainer/Dockerfile"): Promise<string> {
+  const path = join(dir, rel);
+  await Deno.mkdir(join(path, ".."), { recursive: true });
+  await Deno.writeTextFile(path, "ARG AKF_BASE\nFROM ${AKF_BASE}\n");
+  return path;
+}
 
 // A runner that records every invocation and returns success by default.
 // `baseInContainer` controls whether `container image inspect <base>` reports
@@ -35,27 +47,45 @@ function assertNoDockerOrRegistry(calls: { cmd: string; args: string[] }[]) {
 }
 
 Deno.test("runBuild injects AKF_BASE build-arg for project builds", async () => {
-  const { run, calls } = recorder({ baseInContainer: true });
-  const code = await runBuild({
-    cwd: "/tmp/proj",
-    dockerfile: "/tmp/proj/.devcontainer/Dockerfile",
-    tag: "proj-sandbox",
-    run,
-  });
-  assertEquals(code, 0);
+  await withTmpDir(async (dir) => {
+    const { run, calls } = recorder({ baseInContainer: true });
+    const code = await runBuild({
+      cwd: dir,
+      dockerfile: await writeDockerfile(dir),
+      tag: "proj-sandbox",
+      run,
+    });
+    assertEquals(code, 0);
 
-  const base = await builtInImage();
-  const projBuild = containerBuilds(calls).find((b) => b.args.includes("proj-sandbox"));
-  assert(projBuild, "project container build call missing");
-  const i = projBuild!.args.indexOf("--build-arg");
-  assert(i >= 0, "no --build-arg on project build");
-  assertEquals(projBuild!.args[i + 1], `AKF_BASE=${base.ref}`);
-  // Base already present → it must not be rebuilt.
-  assert(
-    !containerBuilds(calls).some((b) => b.args.includes(base.ref)),
-    "present base should not be rebuilt",
-  );
-  assertNoDockerOrRegistry(calls);
+    const base = await builtInImage();
+    const projBuild = containerBuilds(calls).find((b) => b.args.includes("proj-sandbox"));
+    assert(projBuild, "project container build call missing");
+    const i = projBuild!.args.indexOf("--build-arg");
+    assert(i >= 0, "no --build-arg on project build");
+    assertEquals(projBuild!.args[i + 1], `AKF_BASE=${base.ref}`);
+    // Base already present → it must not be rebuilt.
+    assert(
+      !containerBuilds(calls).some((b) => b.args.includes(base.ref)),
+      "present base should not be rebuilt",
+    );
+    assertNoDockerOrRegistry(calls);
+  });
+});
+
+Deno.test("runBuild stamps the project image with the content stamp label", async () => {
+  await withTmpDir(async (dir) => {
+    const { run, calls } = recorder({ baseInContainer: true });
+    const dockerfile = await writeDockerfile(dir);
+    const code = await runBuild({ cwd: dir, dockerfile, tag: "proj-sandbox", run });
+    assertEquals(code, 0);
+
+    const base = await builtInImage();
+    const expected = await sandboxStamp(base.ref, await Deno.readTextFile(dockerfile));
+    const projBuild = containerBuilds(calls).find((b) => b.args.includes("proj-sandbox"));
+    const i = projBuild!.args.indexOf("--label");
+    assert(i >= 0, "no --label on project build");
+    assertEquals(projBuild!.args[i + 1], `${STAMP_LABEL}=${expected}`);
+  });
 });
 
 Deno.test("runBuild skips AKF_BASE injection when building the base itself", async () => {
@@ -80,21 +110,23 @@ Deno.test("runBuild skips AKF_BASE injection when building the base itself", asy
 });
 
 Deno.test("runBuild builds the base first when container lacks it", async () => {
-  const { run, calls } = recorder({ baseInContainer: false });
-  const code = await runBuild({
-    cwd: "/tmp/proj",
-    dockerfile: "/tmp/proj/.devcontainer/Dockerfile",
-    tag: "proj-sandbox",
-    run,
-  });
-  assertEquals(code, 0);
+  await withTmpDir(async (dir) => {
+    const { run, calls } = recorder({ baseInContainer: false });
+    const code = await runBuild({
+      cwd: dir,
+      dockerfile: await writeDockerfile(dir),
+      tag: "proj-sandbox",
+      run,
+    });
+    assertEquals(code, 0);
 
-  const base = await builtInImage();
-  const builds = containerBuilds(calls);
-  const baseIdx = builds.findIndex((b) => b.args.includes(base.ref));
-  const projIdx = builds.findIndex((b) => b.args.includes("proj-sandbox"));
-  assert(baseIdx >= 0, "base build call missing");
-  assert(projIdx >= 0, "project build call missing");
-  assert(baseIdx < projIdx, "base must be built before the project image");
-  assertNoDockerOrRegistry(calls);
+    const base = await builtInImage();
+    const builds = containerBuilds(calls);
+    const baseIdx = builds.findIndex((b) => b.args.includes(base.ref));
+    const projIdx = builds.findIndex((b) => b.args.includes("proj-sandbox"));
+    assert(baseIdx >= 0, "base build call missing");
+    assert(projIdx >= 0, "project build call missing");
+    assert(baseIdx < projIdx, "base must be built before the project image");
+    assertNoDockerOrRegistry(calls);
+  });
 });

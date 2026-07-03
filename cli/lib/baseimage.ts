@@ -49,6 +49,16 @@ export async function materializeEmbeddedDockerfile(info: BuiltInImage): Promise
   return path;
 }
 
+// Content stamp for a project sandbox image: a short hash of the two inputs
+// that determine its contents — the base image it's `FROM` (already
+// content-addressed, so it changes when the embedded base Dockerfile does) and
+// the project Dockerfile's own text. `akf build` bakes this into the image as a
+// label; `akf up` recomputes it and rebuilds when they diverge, so a project
+// image built against a stale base can't silently run (e.g. missing `tmux`).
+export function sandboxStamp(baseRef: string, dockerfileContent: string): Promise<string> {
+  return shortHash(`${baseRef}\n${dockerfileContent}`);
+}
+
 async function shortHash(s: string): Promise<string> {
   const bytes = new TextEncoder().encode(s);
   const buf = await crypto.subtle.digest("SHA-256", bytes);

@@ -1,7 +1,8 @@
 // `akf up` — canonical entry point. Resolves config, picks image, ensures
 // it's available, and execs `container run …`.
 
-import { builtInImage, materializeEmbeddedDockerfile } from "../lib/baseimage.ts";
+import { isAbsolute, join } from "@std/path";
+import { builtInImage, materializeEmbeddedDockerfile, sandboxStamp } from "../lib/baseimage.ts";
 import {
   buildExecArgs,
   buildRunArgs,
@@ -10,6 +11,7 @@ import {
   ensureContainerSystem,
   ensureVolumes,
   imageExists,
+  imageStamp,
   listContainers,
   pullImage,
   realRunner,
@@ -117,46 +119,85 @@ export async function runUp(opts: UpOptions): Promise<number> {
     dockerfile: baseDockerfilePath,
   });
   const isBuiltInBuild = resolved.config.image === undefined && image.needsBuild;
+  // A project build (custom Dockerfile) uses a fixed tag, so `imageExists`
+  // can't tell whether the cached image is current. Compare the stamp `akf
+  // build` baked in against the one its inputs (base ref + Dockerfile) hash to
+  // now; a mismatch means the image predates a base or Dockerfile change and
+  // must be rebuilt — otherwise it silently runs stale (e.g. missing `tmux`).
+  const isProjectBuild = image.needsBuild && !isBuiltInBuild;
+
+  const exists = await imageExists(image.ref, run);
+  let stale = false;
+  if (exists && !opts.rebuild && isProjectBuild && image.dockerfile) {
+    const dfPath = isAbsolute(image.dockerfile)
+      ? image.dockerfile
+      : join(resolved.workspaceDir, image.dockerfile);
+    try {
+      const expected = await sandboxStamp(base.ref, await Deno.readTextFile(dfPath));
+      stale = (await imageStamp(image.ref, run)) !== expected;
+    } catch {
+      // Can't read the Dockerfile to compare — leave the cached image alone.
+    }
+  }
 
   // Image presence check + recovery path. --rebuild forces the build/pull
   // path even when the image is cached — needed when the Dockerfile content
   // has changed (e.g. a bumped pinned SHA) but the tag has not.
-  const needsRefresh = opts.rebuild || !(await imageExists(image.ref, run));
+  const needsRefresh = opts.rebuild || stale || !exists;
   if (needsRefresh) {
-    if (image.needsBuild) {
-      if (opts.rebuild) {
-        console.error(`akf up: --rebuild — rebuilding '${image.ref}' from ${image.dockerfile}…`);
-      } else if (isBuiltInBuild) {
-        console.error(
-          `akf up: built-in base image '${image.ref}' not cached — building (one-time, takes a minute or two)…`,
-        );
+    // A stale rebuild pulls fresh apt/curl layers; offline it fails and would
+    // strand a previously-working `up`. Offer to run the cached image as-is.
+    if (stale && !opts.rebuild && !(await online())) {
+      console.error(
+        `akf up: image '${image.ref}' is stale (built against a different base or an ` +
+          `older ${image.dockerfile}), but you appear to be offline so a rebuild may fail.`,
+      );
+      if (!confirm("akf up: run the stale image anyway?")) {
+        console.error("akf up: aborted. Reconnect and rerun, or `akf up --rebuild`.");
+        return 1;
+      }
+      // User accepted the stale image: skip the refresh and run what's cached.
+    } else {
+      if (image.needsBuild) {
+        if (opts.rebuild) {
+          console.error(`akf up: --rebuild — rebuilding '${image.ref}' from ${image.dockerfile}…`);
+        } else if (stale) {
+          console.error(
+            `akf up: image '${image.ref}' is stale — rebuilding from ${image.dockerfile} ` +
+              `(base or Dockerfile changed since it was built)…`,
+          );
+        } else if (isBuiltInBuild) {
+          console.error(
+            `akf up: built-in base image '${image.ref}' not cached — building (one-time, takes a minute or two)…`,
+          );
+        } else {
+          console.error(
+            `akf up: image '${image.ref}' missing — building from ${image.dockerfile}…`,
+          );
+        }
+        const buildCode = await runBuild({
+          cwd: resolved.workspaceDir,
+          dockerfile: image.dockerfile!,
+          tag: image.ref,
+          run,
+          isBaseBuild: isBuiltInBuild,
+        });
+        if (buildCode !== 0) return buildCode;
       } else {
         console.error(
-          `akf up: image '${image.ref}' missing — building from ${image.dockerfile}…`,
+          opts.rebuild
+            ? `akf up: --rebuild — re-pulling ${image.ref}…`
+            : `akf up: pulling ${image.ref}…`,
         );
-      }
-      const buildCode = await runBuild({
-        cwd: resolved.workspaceDir,
-        dockerfile: image.dockerfile!,
-        tag: image.ref,
-        run,
-        isBaseBuild: isBuiltInBuild,
-      });
-      if (buildCode !== 0) return buildCode;
-    } else {
-      console.error(
-        opts.rebuild
-          ? `akf up: --rebuild — re-pulling ${image.ref}…`
-          : `akf up: pulling ${image.ref}…`,
-      );
-      const pullRes = await pullImage(image.ref, run);
-      if (pullRes.code !== 0) {
-        console.error(
-          `akf up: failed to pull '${image.ref}'. If you're offline, run\n` +
-            `         akf build --from-dockerfile <path>\n` +
-            `       to use a locally-built image instead.`,
-        );
-        return pullRes.code;
+        const pullRes = await pullImage(image.ref, run);
+        if (pullRes.code !== 0) {
+          console.error(
+            `akf up: failed to pull '${image.ref}'. If you're offline, run\n` +
+              `         akf build --from-dockerfile <path>\n` +
+              `       to use a locally-built image instead.`,
+          );
+          return pullRes.code;
+        }
       }
     }
   }
@@ -309,6 +350,19 @@ export async function runUp(opts: UpOptions): Promise<number> {
     try {
       Deno.removeSignalListener("SIGINT", onSig);
     } catch (_) { /* ignore */ }
+  }
+}
+
+// Cheap reachability probe: can we reach the network at all? Used before a
+// stale rebuild, whose apt/curl layers need connectivity — offline, we'd rather
+// ask than fail. A short HEAD to a public anycast IP (no DNS) is enough; any
+// error (timeout, no route, DNS down) counts as offline.
+async function online(): Promise<boolean> {
+  try {
+    await fetch("https://1.1.1.1", { method: "HEAD", signal: AbortSignal.timeout(1500) });
+    return true;
+  } catch {
+    return false;
   }
 }
 

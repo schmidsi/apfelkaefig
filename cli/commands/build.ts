@@ -4,9 +4,15 @@
 // container 1.0.
 
 import { dirname, isAbsolute, resolve } from "@std/path";
-import { imageExists, projectImageTag, realRunner, type Runner } from "../lib/container.ts";
+import {
+  imageExists,
+  projectImageTag,
+  realRunner,
+  type Runner,
+  STAMP_LABEL,
+} from "../lib/container.ts";
 import { ConfigError, resolveConfig } from "../lib/config.ts";
-import { builtInImage, materializeEmbeddedDockerfile } from "../lib/baseimage.ts";
+import { builtInImage, materializeEmbeddedDockerfile, sandboxStamp } from "../lib/baseimage.ts";
 
 export interface BuildOptions {
   cwd: string;
@@ -65,6 +71,14 @@ export async function runBuild(opts: BuildOptions): Promise<number> {
   const baseBuildArgs: string[] = [];
   if (!opts.isBaseBuild) {
     const base = await builtInImage();
+    // Stamp the image with a hash of (base ref + this Dockerfile) so `akf up`
+    // can detect when the cached image was built against a now-stale base and
+    // rebuild instead of running it (e.g. base gained `tmux` but this image
+    // predates it). Skipped for the base build itself (it self-invalidates via
+    // its content-hashed tag).
+    const dockerfileContent = await Deno.readTextFile(dockerfilePath);
+    const stamp = await sandboxStamp(base.ref, dockerfileContent);
+    baseBuildArgs.push("--label", `${STAMP_LABEL}=${stamp}`);
     if (base.embedded) {
       if (!(await imageExists(base.ref, run))) {
         const basePath = await materializeEmbeddedDockerfile(base);

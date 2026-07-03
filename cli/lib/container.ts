@@ -336,6 +336,32 @@ export async function imageExists(ref: string, run: Runner = realRunner): Promis
   return r.code === 0;
 }
 
+// Label key `akf build` stamps onto project sandbox images (see sandboxStamp).
+export const STAMP_LABEL = "com.apfelkaefig.stamp";
+
+// Read the content stamp baked into a cached image, or null when the image is
+// missing, unreadable, or predates stamping. Apple `container image inspect`
+// surfaces build labels under variants[].config.config.Labels.
+export async function imageStamp(ref: string, run: Runner = realRunner): Promise<string | null> {
+  const r = await run("container", ["image", "inspect", ref], {
+    stdout: "piped",
+    stderr: "null",
+  });
+  if (r.code !== 0) return null;
+  try {
+    const parsed = JSON.parse(r.stdout);
+    const entry = Array.isArray(parsed) ? parsed[0] : parsed;
+    const variants = entry?.variants;
+    for (const v of Array.isArray(variants) ? variants : []) {
+      const labels = v?.config?.config?.Labels;
+      if (labels && typeof labels[STAMP_LABEL] === "string") return labels[STAMP_LABEL];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function containerVersion(run: Runner = realRunner): Promise<string | null> {
   const r = await run("container", ["--version"], { stdout: "piped", stderr: "null" });
   if (r.code !== 0) return null;

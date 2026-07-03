@@ -5,12 +5,15 @@ import {
   claudeProfileLabel,
   containerIsRunning,
   ensureVolumes,
+  imageStamp,
   projectImageTag,
   resolveImageRef,
   sandboxContainerName,
+  STAMP_LABEL,
   tmuxWrap,
 } from "./container.ts";
 import type { Runner } from "./container.ts";
+import { sandboxStamp } from "./baseimage.ts";
 import type { ResolvedConfig } from "./config.ts";
 
 function resolved(
@@ -168,6 +171,38 @@ Deno.test("buildRunArgs: commandOverride bypasses tmux wrapping even when tmux:t
     commandOverride: ["/usr/local/bin/akf-sshd"],
   });
   assertEquals(out.args.slice(-2), ["img", "/usr/local/bin/akf-sshd"]);
+});
+
+Deno.test("sandboxStamp: deterministic and input-sensitive", async () => {
+  const a = await sandboxStamp("base:1", "FROM base\n");
+  assertEquals(a, await sandboxStamp("base:1", "FROM base\n"));
+  assert(a !== (await sandboxStamp("base:2", "FROM base\n")), "base ref must change the stamp");
+  assert(
+    a !== (await sandboxStamp("base:1", "FROM base\nRUN x\n")),
+    "content must change the stamp",
+  );
+});
+
+Deno.test("imageStamp: reads the stamp label from inspect JSON", async () => {
+  const run: Runner = (_cmd, args) => {
+    assertEquals(args.slice(0, 2), ["image", "inspect"]);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify([
+        { variants: [{ config: { config: { Labels: { [STAMP_LABEL]: "deadbeef" } } } }] },
+      ]),
+      stderr: "",
+    });
+  };
+  assertEquals(await imageStamp("img", run), "deadbeef");
+});
+
+Deno.test("imageStamp: null when the label or image is absent", async () => {
+  const noLabel: Runner = () =>
+    Promise.resolve({ code: 0, stdout: JSON.stringify([{ variants: [] }]), stderr: "" });
+  assertEquals(await imageStamp("img", noLabel), null);
+  const missing: Runner = () => Promise.resolve({ code: 1, stdout: "", stderr: "not found" });
+  assertEquals(await imageStamp("img", missing), null);
 });
 
 Deno.test("containerIsRunning: matches a running container by name", async () => {
