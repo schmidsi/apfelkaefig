@@ -1,3 +1,4 @@
+import { resolveOp } from "../../lib/secrets.ts";
 import type { BuiltInPlugin } from "../types.ts";
 
 const ONEPASSWORD_GUIDANCE = `## 1Password inside the sandbox
@@ -10,6 +11,19 @@ export const onePasswordPlugin: BuiltInPlugin = {
   id: "1password",
   aliases: ["1pw", "op"],
   description: "Forward OP_SERVICE_ACCOUNT_TOKEN and document op read usage inside the sandbox.",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+    ],
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the 1Password sandbox integration.",
+      },
+    },
+  },
   validateConfig(config) {
     for (const k of Object.keys(config)) {
       if (k !== "enabled") {
@@ -21,7 +35,7 @@ export const onePasswordPlugin: BuiltInPlugin = {
     }
   },
   defaultConfig: { enabled: true },
-  applyConfig(base, config, _ctx) {
+  transformConfig(base, config, _ctx) {
     if (!config.enabled) return base;
     return {
       ...base,
@@ -38,5 +52,14 @@ export const onePasswordPlugin: BuiltInPlugin = {
       endMarker: "<!-- akf plugin: 1password end -->",
       contents: ONEPASSWORD_GUIDANCE,
     }];
+  },
+  // Token injection is implicit-on (this hook also runs when the plugin has
+  // no config section — see runUp): inject when a token is found, require it
+  // when secrets.onepassword is true, skip when false / AKF_DISABLE_OP=1.
+  // Throws SecretsRequiredError / TruncatedTokenError for runUp to surface.
+  async runtimeEnv(ctx): Promise<Record<string, string>> {
+    const token = await resolveOp({ explicit: ctx.config.secrets?.onepassword });
+    if (!token) return {};
+    return { OP_SERVICE_ACCOUNT_TOKEN: token };
   },
 };

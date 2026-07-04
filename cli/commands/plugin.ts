@@ -66,6 +66,10 @@ export async function runPluginCommand(
     return 0;
   }
 
+  if (action === "sync") {
+    return await syncPluginBlocks({ cwd });
+  }
+
   console.error(`akf plugin: unknown action '${action}'`);
   printPluginUsage();
   return 2;
@@ -93,20 +97,7 @@ export async function addPluginToWorkspace(
     await Deno.writeTextFile(configPath, afterText);
   }
 
-  const markerStatuses = [];
-  await ensureDockerfileBaseIfNeeded(workspaceDir, after);
-  for (const block of [...pluginDockerfileBlocks(after), ...pluginMarkerBlocks(after)]) {
-    const path = join(workspaceDir, block.path);
-    let status: UpsertStatus;
-    try {
-      status = await upsertBlock(path, block.startMarker, block.endMarker, block.contents);
-    } catch (err) {
-      // Drift refusal (edited owned block) is a designed path — surface it as a
-      // clean CLI error instead of an uncaught stack trace.
-      throw new PluginError((err as Error).message);
-    }
-    markerStatuses.push({ path: block.path, status });
-  }
+  const markerStatuses = await writeOwnedBlocks(workspaceDir, after);
 
   return {
     configPath,
@@ -118,11 +109,80 @@ export async function addPluginToWorkspace(
   };
 }
 
+// Re-render every enabled plugin's generated blocks from the given config.
+// Blocks are machine-owned (tasks/011, decision 3): existing content between
+// the markers is overwritten without asking — removing the markers is how a
+// user takes ownership of a block.
+export async function writeOwnedBlocks(
+  workspaceDir: string,
+  config: ApfelkaefigConfig,
+): Promise<Array<{ path: string; status: UpsertStatus }>> {
+  const statuses = [];
+  await ensureDockerfileBaseIfNeeded(workspaceDir, config);
+  for (const block of [...pluginDockerfileBlocks(config), ...pluginMarkerBlocks(config)]) {
+    const path = join(workspaceDir, block.path);
+    let status: UpsertStatus;
+    try {
+      status = await upsertBlock(
+        path,
+        block.startMarker,
+        block.endMarker,
+        withOwnershipNote(block),
+        { overwrite: true },
+      );
+    } catch (err) {
+      // Structurally broken block (start marker without end) — surface it as
+      // a clean CLI error instead of an uncaught stack trace.
+      throw new PluginError((err as Error).message);
+    }
+    statuses.push({ path: block.path, status });
+  }
+  return statuses;
+}
+
+// `akf plugin sync` — re-render all generated blocks from the current config.
+// This is the supported path for config edits that feed the blocks (e.g.
+// bumping plugins.telegram.sha): edit .apfelkaefig.json, run sync, rebuild.
+export async function syncPluginBlocks({ cwd }: { cwd: string }): Promise<number> {
+  const found = await findConfig(cwd);
+  if (!found.apfelkaefig) {
+    console.error("akf plugin sync: no .apfelkaefig.json found");
+    return 1;
+  }
+  const config = parseConfig(await Deno.readTextFile(found.apfelkaefig), found.apfelkaefig);
+  const statuses = await writeOwnedBlocks(found.dir, config);
+  if (statuses.length === 0) {
+    console.log("akf plugin sync: no enabled plugins with generated blocks — nothing to do.");
+    return 0;
+  }
+  console.log();
+  for (const s of statuses) {
+    console.log(`  ${s.path.padEnd(34)} ${STATUS_LABELS[s.status]}`);
+  }
+  console.log();
+  if (statuses.some((s) => s.status !== "skipped-present")) {
+    console.log("Blocks re-rendered. If a Dockerfile block changed, rebuild: akf up --rebuild");
+  } else {
+    console.log("All blocks already up to date.");
+  }
+  return 0;
+}
+
+// The ownership contract, stated inside each generated block (decision 3).
+// Comment syntax follows the target file type.
+function withOwnershipNote(block: { path: string; contents: string }): string {
+  const note = block.path.endsWith(".md")
+    ? "<!-- machine-owned by akf: overwritten by `akf plugin add`/`akf plugin sync`. Remove the marker comments to take ownership. -->"
+    : "# machine-owned by akf: overwritten by `akf plugin add`/`akf plugin sync`. Remove the marker lines to take ownership.";
+  return `${note}\n${block.contents}`;
+}
+
 function printPluginUsage(): void {
   console.log(`Usage:
   akf plugin list
   akf plugin explain <id>
-  akf plugin add <id>`);
+  akf plugin add <id>
+  akf plugin sync`);
 }
 
 function printAddResult(result: PluginAddResult): void {

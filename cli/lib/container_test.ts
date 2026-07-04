@@ -8,9 +8,7 @@ import {
   imageStamp,
   projectImageTag,
   resolveImageRef,
-  sandboxContainerName,
   STAMP_LABEL,
-  tmuxWrap,
 } from "./container.ts";
 import type { Runner } from "./container.ts";
 import { join } from "@std/path";
@@ -126,23 +124,15 @@ Deno.test("buildRunArgs: commandOverride and userOverride replace command and us
   assert(out.args.includes("-i") && !out.args.includes("-it"), "expected -i without -it");
 });
 
-Deno.test("tmuxWrap: wraps a command in the shared akf session", () => {
-  assertEquals(
-    tmuxWrap(["claude", "--dangerously-skip-permissions"]),
-    ["tmux", "new-session", "-A", "-s", "akf", "claude", "--dangerously-skip-permissions"],
+Deno.test("buildExecArgs: runs a command over container exec via a shell with explicit PATH", () => {
+  const args = buildExecArgs(
+    "akf-proj",
+    ["tmux", "new-session", "-A", "-s", "akf", "claude"],
+    { tty: true },
   );
-});
-
-Deno.test("sandboxContainerName: akf- prefixed project slug", () => {
-  assertEquals(sandboxContainerName("/Users/me/ses.box"), "akf-ses.box");
-  assertEquals(sandboxContainerName("/Users/me/MyProj"), "akf-myproj");
-});
-
-Deno.test("buildExecArgs: attaches over container exec via a shell with explicit PATH", () => {
-  const args = buildExecArgs("akf-proj", ["claude"], { tty: true });
   assertEquals(args.slice(0, 5), ["exec", "-it", "akf-proj", "/bin/sh", "-c"]);
-  // container exec doesn't inherit the image PATH, so tmux is resolved via an
-  // explicit PATH prefix; the tmux invocation is shell-quoted.
+  // container exec doesn't inherit the image PATH, so the binary is resolved
+  // via an explicit PATH prefix; the invocation is shell-quoted.
   const inner = args[5];
   assert(inner.startsWith('PATH="/usr/local/sbin:'), `unexpected inner: ${inner}`);
   assert(
@@ -153,26 +143,14 @@ Deno.test("buildExecArgs: attaches over container exec via a shell with explicit
   assertEquals(buildExecArgs("akf-proj", ["claude"], { tty: false })[1], "-i");
 });
 
-Deno.test("buildRunArgs: tmux:true wraps the command in a tmux session", () => {
+Deno.test("buildRunArgs: tmux:true alone does not wrap the command (wrapping is a run hook)", () => {
   const out = buildRunArgs({
     resolved: resolved({ tmux: true, command: ["claude"] }),
     workspaceHostPath: "/Users/me/proj",
     imageRef: "img",
     homeDir: "/nonexistent",
   });
-  const imgIdx = out.args.indexOf("img");
-  assertEquals(out.args.slice(imgIdx + 1), ["tmux", "new-session", "-A", "-s", "akf", "claude"]);
-});
-
-Deno.test("buildRunArgs: commandOverride bypasses tmux wrapping even when tmux:true", () => {
-  const out = buildRunArgs({
-    resolved: resolved({ tmux: true }),
-    workspaceHostPath: "/Users/me/proj",
-    imageRef: "img",
-    homeDir: "/nonexistent",
-    commandOverride: ["/usr/local/bin/akf-sshd"],
-  });
-  assertEquals(out.args.slice(-2), ["img", "/usr/local/bin/akf-sshd"]);
+  assertEquals(out.args.slice(-2), ["img", "claude"]);
 });
 
 Deno.test("buildRunArgs: overlays the staged credential after the ~/.claude mount", async () => {

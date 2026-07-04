@@ -5,7 +5,9 @@
   "description": "Configuration for an apfelkäfig sandbox. Drop this file at the root of your project as .apfelkaefig.json to make the project akf-native (tier 2). The akf binary reads it at run time; no scripts get committed to the repo. JSONC: comments and trailing commas are allowed.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version"],
+  "required": [
+    "version"
+  ],
   "properties": {
     "$schema": {
       "type": "string",
@@ -26,7 +28,9 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["dockerfile"],
+          "required": [
+            "dockerfile"
+          ],
           "properties": {
             "dockerfile": {
               "type": "string",
@@ -42,11 +46,17 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["source", "target"],
+        "required": [
+          "source",
+          "target"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["bind", "volume"],
+            "enum": [
+              "bind",
+              "volume"
+            ],
             "default": "bind",
             "description": "Mount kind. \"bind\" (default) maps a host path. \"volume\" uses an Apple `container` named volume; akf creates it idempotently before run."
           },
@@ -69,7 +79,9 @@
     "env": {
       "type": "object",
       "description": "Environment variables injected into the container. Values support ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename}.",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "user": {
       "type": "string",
@@ -99,8 +111,15 @@
     "command": {
       "description": "Command to run inside the container. Defaults to [\"claude\", \"--dangerously-skip-permissions\"]. String is split on whitespace; array is passed verbatim.",
       "oneOf": [
-        { "type": "string" },
-        { "type": "array", "items": { "type": "string" } }
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       ]
     },
     "tmux": {
@@ -125,7 +144,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["host", "container"],
+        "required": [
+          "host",
+          "container"
+        ],
         "properties": {
           "hostIp": {
             "type": "string",
@@ -143,7 +165,10 @@
           },
           "protocol": {
             "type": "string",
-            "enum": ["tcp", "udp"],
+            "enum": [
+              "tcp",
+              "udp"
+            ],
             "default": "tcp"
           }
         }
@@ -161,7 +186,9 @@
         "1password": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled"],
+          "required": [
+            "enabled"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -172,7 +199,13 @@
         "crit": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "agentIntegration", "installMethod", "version", "port"],
+          "required": [
+            "enabled",
+            "agentIntegration",
+            "installMethod",
+            "version",
+            "port"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -201,7 +234,13 @@
         "telegram": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "repo", "sha", "storage", "userIsolation"],
+          "required": [
+            "enabled",
+            "repo",
+            "sha",
+            "storage",
+            "userIsolation"
+          ],
           "description": "Install gskril/telegram-cli with per-project isolated session storage.",
           "properties": {
             "enabled": {
@@ -220,7 +259,11 @@
             },
             "storage": {
               "type": "string",
-              "enum": ["instance", "named", "host"],
+              "enum": [
+                "instance",
+                "named",
+                "host"
+              ],
               "description": "Session storage. 'instance': per-clone named volumes (path-derived). 'named': repo-scoped named volumes shared across clones on the same host. 'host': bind-mount host ~/.config/telegram-cli and state dir (no isolation from host).",
               "default": "instance"
             },
@@ -244,7 +287,11 @@
         "ssh": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "authorizedKey", "port"],
+          "required": [
+            "enabled",
+            "authorizedKey",
+            "port"
+          ],
           "description": "Run sshd in the sandbox so the Claude Code / Codex desktop apps can attach over SSH. Reachable while `akf up --serve` is running.",
           "properties": {
             "enabled": {

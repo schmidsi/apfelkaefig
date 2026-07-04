@@ -9,6 +9,7 @@ import { runDoctor } from "./commands/doctor.ts";
 import { runPluginCommand } from "./commands/plugin.ts";
 import { runStatusline } from "./commands/statusline.ts";
 import { parsePluginList, PluginError } from "./lib/plugins.ts";
+import { allUpPluginFlags } from "./lib/flags.ts";
 import denoJson from "../deno.json" with { type: "json" };
 
 const USAGE = `akf — dev sandboxes on Apple container (der Käfer im Apfel)
@@ -30,8 +31,10 @@ Usage:
                            profile — e.g. ~/.claude-work → 'claude-work'.
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
-  akf plugin list|explain|add
-                           Manage built-in sandbox plugins.
+  akf plugin list|explain|add|sync
+                           Manage built-in sandbox plugins. sync re-renders
+                           the generated Dockerfile/CLAUDE.md blocks after a
+                           config edit (blocks are machine-owned).
   akf statusline           Install the Claude Code statusline helper into
                            ~/.claude/bin/ (one-time, global).
   akf build [--from-dockerfile <path>]
@@ -128,9 +131,11 @@ export type UpArgs =
 
 export function parseUpArgs(rest: string[]): UpArgs {
   let unknownFlag: string | undefined;
+  // Core flags plus whatever the compiled-in plugins declare (uniqueness is
+  // asserted at registry construction — see assertFlagUniqueness).
   const flags = parseArgs(rest, {
     string: ["image"],
-    boolean: ["rebuild", "serve", "tmux", "help"],
+    boolean: ["rebuild", "help", ...allUpPluginFlags()],
     alias: { h: "help" },
     "--": true,
     unknown: (arg, key) => {
@@ -149,10 +154,10 @@ export function parseUpArgs(rest: string[]): UpArgs {
   return {
     kind: "run",
     positional: [...flags._.map(String), ...(flags["--"] ?? []).map(String)],
-    imageOverride: flags.image,
-    rebuild: flags.rebuild,
-    serve: flags.serve,
-    tmux: flags.tmux,
+    imageOverride: flags.image as string | undefined,
+    rebuild: Boolean(flags.rebuild),
+    serve: Boolean(flags.serve),
+    tmux: Boolean(flags.tmux),
   };
 }
 

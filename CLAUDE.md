@@ -30,9 +30,18 @@ for themselves.
   scope. Decide which tier a change belongs to before adding code.
 - **Marker-managed blocks** must be re-rendered idempotently by `akf init`, never hand-merged:
   `<!-- akf:start -->` / `<!-- akf:end -->` in this file, `# >>> akf >>>` / `# <<< akf <<<` in host
-  `.gitignore`.
+  `.gitignore`. Plugin blocks (`akf plugin: …` markers) are **machine-owned**: `akf plugin
+  add`/`sync` overwrite them without asking — removing the markers is how a user takes ownership.
 - **Never touch `settings.local.json`** from `akf init` — `--dangerously-skip-permissions` makes it
   dead config, and merging into it breaks user edits.
+- **Minimal core, powerful plugins.** New capabilities and run-behaviors go into plugins
+  (`cli/plugins/`), not into `up.ts`/`main.ts` branches. Core stays orchestration. See
+  `tasks/011_plugin_runtime_hooks.md` for the hook interface and settled design decisions.
+- **No speculative extension points.** Add a hook, flag, or config key only when a concrete
+  consumer needs it — never "for later." This applies doubly to the plugin interface.
+- **Plugins are built-in and compiled-in.** No dynamic loading, no third-party plugins — arbitrary
+  code with run-lifecycle powers in a sandboxing tool is a trust problem. Revisit only on concrete
+  external demand.
 
 ## Where things live
 
@@ -63,6 +72,7 @@ read-only.
 
 
 <!-- akf plugin: ssh start -->
+<!-- machine-owned by akf: overwritten by `akf plugin add`/`akf plugin sync`. Remove the marker comments to take ownership. -->
 ## SSH access to the sandbox
 
 This project enables the akf `ssh` plugin. Run:
@@ -105,6 +115,7 @@ host key persists across runs so reconnects don't trip `known_hosts`.
   — `~/.claude/remote` landed on virtiofs (the host mount), which rejects chmod on
   socket inodes. A native named volume shadows that subdir to fix it.
 
-Diagnose from the host with `container logs akf-serve-<projectSlug>` (sshd auth)
-and, inside the box, `~/.claude/remote/run/<id>/remote-server.log` (daemon).
+Diagnose from the host with `container logs <container>` — the container name
+is printed in the `akf up --serve` banner — and, inside the box,
+`~/.claude/remote/run/<id>/remote-server.log` (daemon).
 <!-- akf plugin: ssh end -->

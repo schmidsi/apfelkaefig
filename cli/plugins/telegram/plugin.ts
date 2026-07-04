@@ -15,7 +15,7 @@
 // `sudo -u telegram`, so claude-running-as-node can invoke telegram but
 // cannot read the session DB directly. Incompatible with storage=host.
 
-import { projectSlug, readTextIfPresent } from "../../lib/fs.ts";
+import { djb2Hex, projectSlug, readTextIfPresent } from "../../lib/fs.ts";
 import type {
   BuiltInPlugin,
   PluginContext,
@@ -23,12 +23,9 @@ import type {
   PluginDoctorContext,
   SetupStep,
 } from "../types.ts";
-import {
-  type ApfelkaefigConfig,
-  type MountConfig,
-  type TelegramStorage,
-  VOLUME_NAME_RE,
-} from "../../lib/schema.ts";
+import { type ApfelkaefigConfig, type MountConfig, VOLUME_NAME_RE } from "../../lib/schema.ts";
+
+type TelegramStorage = "instance" | "named" | "host";
 
 const DEFAULT_REPO = "https://github.com/gskril/telegram-cli.git";
 // Latest gskril/telegram-cli HEAD at plugin time. Bump by hand when the
@@ -54,6 +51,62 @@ export const telegramPlugin: BuiltInPlugin = {
   id: "telegram",
   aliases: ["tg"],
   description: "Install gskril/telegram-cli with per-project isolated session storage.",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "repo",
+      "sha",
+      "storage",
+      "userIsolation",
+    ],
+    "description": "Install gskril/telegram-cli with per-project isolated session storage.",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the Telegram CLI integration.",
+      },
+      "repo": {
+        "type": "string",
+        "pattern": "^https://[^\\s]+\\.git$",
+        "description":
+          "https git URL of the telegram-cli fork to install. Defaults to gskril/telegram-cli.",
+      },
+      "sha": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{40}$",
+        "description": "Pinned commit SHA to check out and build from.",
+      },
+      "storage": {
+        "type": "string",
+        "enum": [
+          "instance",
+          "named",
+          "host",
+        ],
+        "description":
+          "Session storage. 'instance': per-clone named volumes (path-derived). 'named': repo-scoped named volumes shared across clones on the same host. 'host': bind-mount host ~/.config/telegram-cli and state dir (no isolation from host).",
+        "default": "instance",
+      },
+      "userIsolation": {
+        "type": "boolean",
+        "description":
+          "If true, install a dedicated 'telegram' system user and require sudo from the agent user to invoke the CLI. Incompatible with storage='host'.",
+        "default": false,
+      },
+      "configVolume": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "description": "Override the derived config volume name (storage='named' only).",
+      },
+      "stateVolume": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "description": "Override the derived state volume name (storage='named' only).",
+      },
+    },
+  },
   validateConfig(config) {
     const allowed = [
       "enabled",
@@ -104,7 +157,7 @@ export const telegramPlugin: BuiltInPlugin = {
       userIsolation: false,
     };
   },
-  applyConfig(base, raw, ctx) {
+  transformConfig(base, raw, ctx) {
     const config = raw as unknown as TelegramConfig;
     if (!config.enabled) return base;
 
@@ -225,17 +278,6 @@ function volumeNames(
     configVol: `tg-${stem}-${hash}-config`,
     stateVol: `tg-${stem}-${hash}-state`,
   };
-}
-
-// Non-crypto stable hash. 8 hex chars is enough to disambiguate a handful
-// of clones on one host; collision risk is tiny and the worst case (two
-// paths share a volume) is a re-auth, not data loss.
-function djb2Hex(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
 }
 
 function renderMarker(config: TelegramConfig): string {

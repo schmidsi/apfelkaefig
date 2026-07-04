@@ -6,7 +6,8 @@
     "fmt": "deno fmt",
     "lint": "deno lint",
     "check": "deno check cli/main.ts",
-    "compile": "deno run --allow-run --allow-read --allow-write scripts/stamp-build.ts && deno compile -A --target aarch64-apple-darwin --include ./templates --include ./image --include ./deno.json --include ./cli/build_info.json --output dist/akf cli/main.ts"
+    "compile": "deno run --allow-run --allow-read --allow-write scripts/stamp-build.ts && deno compile -A --target aarch64-apple-darwin --include ./templates --include ./image --include ./deno.json --include ./cli/build_info.json --output dist/akf cli/main.ts",
+    "gen-schema": "deno run --allow-read --allow-write scripts/gen-schema.ts"
   },
   "imports": {
     "@std/cli": "jsr:@std/cli@^1.0.9",
@@ -19,12 +20,21 @@
     "lineWidth": 100,
     "indentWidth": 2,
     "semiColons": true,
-    "exclude": ["npm/", "dist/"]
+    "exclude": [
+      "npm/",
+      "dist/"
+    ]
   },
   "lint": {
-    "exclude": ["npm/", "dist/", "image/"],
+    "exclude": [
+      "npm/",
+      "dist/",
+      "image/"
+    ],
     "rules": {
-      "tags": ["recommended"]
+      "tags": [
+        "recommended"
+      ]
     }
   }
 }

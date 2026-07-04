@@ -9,7 +9,7 @@ import {
   SCHEMA_VERSION,
   VOLUME_NAME_RE,
 } from "./schema.ts";
-import { listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
+import { applyPluginTransforms, listPlugins, PluginError, resolvePluginId } from "./plugins.ts";
 import { pathExists, projectSlug } from "./fs.ts";
 
 export type ConfigSource =
@@ -356,6 +356,13 @@ export async function resolveConfig({
     }
     const text = await Deno.readTextFile(found.apfelkaefig);
     config = parseConfig(text, found.apfelkaefig);
+    // Deprecated alias (tasks/011, decision 5): explicit secrets.onepassword
+    // still works, but the plugin section is the canonical spelling now.
+    if (config.secrets?.onepassword === true && config.plugins?.["1password"] === undefined) {
+      warnings.push(
+        "'secrets.onepassword' is deprecated — run `akf plugin add 1password` (still honored)",
+      );
+    }
     source = { kind: "apfelkaefig", path: found.apfelkaefig, dir: found.dir, raw: config };
   } else if (found.devcontainer) {
     const text = await Deno.readTextFile(found.devcontainer);
@@ -398,6 +405,11 @@ export async function resolveConfig({
     source = { kind: "defaults", dir: found.dir };
   }
 
+  // Plugin config effects (mounts, ports, env, image) resolve here on every
+  // invocation — they are never materialized into the config file (tasks/011).
+  config = applyPluginTransforms(config, { workspaceDir: source.dir });
+
+  // CLI flags are the outermost layer: they override plugin transforms too.
   if (cliOverrides.command) config = { ...config, command: cliOverrides.command };
   if (cliOverrides.image) config = { ...config, image: cliOverrides.image };
 
@@ -472,28 +484,9 @@ function parseDevcontainerMount(s: string): MountConfig | null {
   return m;
 }
 
-// Substitute ${localEnv:VAR}, ${localWorkspaceFolder}, ${localWorkspaceFolderBasename},
-// ${devcontainerId}. Same dialect as devcontainer.json. ${devcontainerId} is the
-// spec's stable per-project id (commonly used in named-volume sources); we resolve
-// it to the project slug so it matches the volume-name regex and stays consistent
-// with akf's image tag (`<slug>-sandbox`).
-export function substitute(
-  s: string,
-  ctx: { workspaceFolder: string; env?: Record<string, string | undefined> },
-): string {
-  const env = ctx.env ?? Deno.env.toObject();
-  const basename = ctx.workspaceFolder.split("/").filter(Boolean).pop() ?? "";
-
-  let out = s;
-  out = out.replace(
-    /\$\{localEnv:([A-Za-z_][A-Za-z0-9_]*)\}/g,
-    (_, name) => env[name] ?? "",
-  );
-  out = out.replaceAll("${localWorkspaceFolder}", ctx.workspaceFolder);
-  out = out.replaceAll("${localWorkspaceFolderBasename}", basename);
-  out = out.replaceAll("${devcontainerId}", projectSlug(ctx.workspaceFolder));
-  return out;
-}
+// Re-exported from substitute.ts (moved there so plugins can import it
+// without a cycle through this module); call sites keep importing from here.
+export { substitute } from "./substitute.ts";
 
 // Compute the effective values used by `up` after applying defaults.
 export function effective(resolved: ResolvedConfig): {

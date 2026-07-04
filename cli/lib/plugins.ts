@@ -1,9 +1,12 @@
-import { type ApfelkaefigConfig, type PluginConfigMap, SCHEMA_URL } from "./schema.ts";
+import { type ApfelkaefigConfig, SCHEMA_URL } from "./schema.ts";
 import {
   type BuiltInPlugin,
   type MarkerBlock,
   type PluginContext,
   type PluginDoctorCheck,
+  type PreRunResult,
+  type RunContext,
+  type RunOverrides,
   type SetupStep,
 } from "../plugins/types.ts";
 import { onePasswordPlugin } from "../plugins/1password/plugin.ts";
@@ -11,21 +14,30 @@ import { critPlugin } from "../plugins/crit/plugin.ts";
 import { sshPlugin } from "../plugins/ssh/plugin.ts";
 import { telegramPlugin } from "../plugins/telegram/plugin.ts";
 
-export type { BuiltInPlugin, MarkerBlock, PluginContext, PluginDoctorCheck, SetupStep };
+export type {
+  BuiltInPlugin,
+  MarkerBlock,
+  PluginContext,
+  PluginDoctorCheck,
+  PreRunResult,
+  RunContext,
+  RunOverrides,
+  SetupStep,
+};
 
-export type PluginId = keyof PluginConfigMap;
-
-const REGISTRY: Record<PluginId, BuiltInPlugin> = {
+const REGISTRY = {
   "1password": onePasswordPlugin,
   "crit": critPlugin,
   "telegram": telegramPlugin,
   "ssh": sshPlugin,
-};
+} satisfies Record<string, BuiltInPlugin>;
+
+export type PluginId = keyof typeof REGISTRY;
 
 const ALIASES = new Map<string, PluginId>();
 for (const plugin of Object.values(REGISTRY)) {
-  ALIASES.set(plugin.id, plugin.id);
-  for (const alias of plugin.aliases) ALIASES.set(alias, plugin.id);
+  ALIASES.set(plugin.id, plugin.id as PluginId);
+  for (const alias of plugin.aliases) ALIASES.set(alias, plugin.id as PluginId);
 }
 
 export class PluginError extends Error {
@@ -82,7 +94,10 @@ export function withPlugin(
     ? plugin.defaultConfig(ctx)
     : plugin.defaultConfig;
   const pluginConfig = { ...defaults, ...(existing ?? {}), enabled: true };
-  const next: ApfelkaefigConfig = {
+  // Only the plugins section is written. The plugin's config effects (mounts,
+  // ports, env, image) are applied at resolve time by applyPluginTransforms —
+  // never materialized into .apfelkaefig.json (tasks/011).
+  return {
     $schema: config.$schema ?? SCHEMA_URL,
     ...config,
     plugins: {
@@ -90,7 +105,22 @@ export function withPlugin(
       [id]: pluginConfig,
     },
   };
-  return plugin.applyConfig(next, pluginConfig, ctx);
+}
+
+// Apply enabled plugins' config transforms (mounts, ports, env, image) to an
+// in-memory config, in config-file order. Runs on EVERY resolve; the result
+// feeds `container run` args and is never written back to disk.
+export function applyPluginTransforms(
+  config: ApfelkaefigConfig,
+  ctx: PluginContext,
+): ApfelkaefigConfig {
+  let out = config;
+  for (const [id, pluginConfig] of Object.entries(config.plugins ?? {})) {
+    if (!pluginConfig?.enabled) continue;
+    const plugin = getPlugin(id as PluginId);
+    out = plugin.transformConfig?.(out, pluginConfig as Record<string, unknown>, ctx) ?? out;
+  }
+  return out;
 }
 
 export function pluginMarkerBlocks(config: ApfelkaefigConfig): MarkerBlock[] {

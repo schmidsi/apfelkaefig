@@ -1,9 +1,8 @@
 import { withTmpDir } from "../lib/test_util.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { join } from "@std/path";
-import { addPluginToWorkspace } from "./plugin.ts";
+import { addPluginToWorkspace, syncPluginBlocks } from "./plugin.ts";
 import { runInit } from "./init.ts";
-import { PluginError } from "../lib/plugins.ts";
 
 Deno.test("plugin add 1password creates config and marker block", async () => {
   await withTmpDir(async (dir) => {
@@ -13,7 +12,8 @@ Deno.test("plugin add 1password creates config and marker block", async () => {
 
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins["1password"], { enabled: true });
-    assertEquals(config.secrets.onepassword, true);
+    // Config effects (secrets) resolve at runtime, never materialized (tasks/011).
+    assertEquals(config.secrets, undefined);
 
     const claude = await Deno.readTextFile(join(dir, "CLAUDE.md"));
     assert(claude.includes("<!-- akf plugin: 1password start -->"));
@@ -56,7 +56,7 @@ Deno.test("plugin add writes to discovered workspace root from subdir", async ()
   });
 });
 
-Deno.test("plugin add refuses edited owned marker block", async () => {
+Deno.test("plugin add overwrites an edited owned marker block (machine-owned)", async () => {
   await withTmpDir(async (dir) => {
     await addPluginToWorkspace({ cwd: dir, plugin: "1password" });
     const claudePath = join(dir, "CLAUDE.md");
@@ -64,11 +64,12 @@ Deno.test("plugin add refuses edited owned marker block", async () => {
       claudePath,
       "<!-- akf plugin: 1password start -->\nuser edit\n<!-- akf plugin: 1password end -->\n",
     );
-    await assertRejects(
-      () => addPluginToWorkspace({ cwd: dir, plugin: "1password" }),
-      PluginError,
-      "differs from generated content",
-    );
+    const result = await addPluginToWorkspace({ cwd: dir, plugin: "1password" });
+    assertEquals(result.markerStatuses, [{ path: "CLAUDE.md", status: "updated" }]);
+    const claude = await Deno.readTextFile(claudePath);
+    assert(claude.includes("op read"), "generated content not restored");
+    assert(!claude.includes("user edit"), "hand edit survived inside owned block");
+    assert(claude.includes("machine-owned by akf"), "ownership note missing");
   });
 });
 
@@ -80,15 +81,10 @@ Deno.test("plugin add crit creates config, Dockerfile block, and guidance", asyn
 
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins.crit.version, "v0.13.0");
-    assertEquals(config.image, { dockerfile: ".devcontainer/Dockerfile" });
-    assertEquals(config.env.CRIT_HOST, "0.0.0.0");
-    assertEquals(config.env.CRIT_PORT, "3247");
-    assertEquals(config.ports, [{
-      hostIp: "127.0.0.1",
-      host: 3247,
-      container: 3247,
-      protocol: "tcp",
-    }]);
+    // Image/env/ports resolve at runtime from the plugins section (tasks/011).
+    assertEquals(config.image, undefined);
+    assertEquals(config.env, undefined);
+    assertEquals(config.ports, undefined);
 
     const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
     assert(dockerfile.includes("# >>> akf plugin: crit"));
@@ -113,17 +109,42 @@ Deno.test("plugin add crit is idempotent", async () => {
   });
 });
 
-Deno.test("plugin add crit refuses edited Dockerfile owned block", async () => {
+Deno.test("plugin add crit overwrites an edited Dockerfile owned block", async () => {
   await withTmpDir(async (dir) => {
     await addPluginToWorkspace({ cwd: dir, plugin: "crit" });
     const dockerfilePath = join(dir, ".devcontainer/Dockerfile");
     const dockerfile = await Deno.readTextFile(dockerfilePath);
     await Deno.writeTextFile(dockerfilePath, dockerfile.replace("crit --version", "echo edited"));
-    await assertRejects(
-      () => addPluginToWorkspace({ cwd: dir, plugin: "crit" }),
-      PluginError,
-      "differs from generated content",
+    const result = await addPluginToWorkspace({ cwd: dir, plugin: "crit" });
+    assertEquals(result.markerStatuses[0], { path: ".devcontainer/Dockerfile", status: "updated" });
+    const restored = await Deno.readTextFile(dockerfilePath);
+    assert(restored.includes("crit --version"), "generated content not restored");
+    assert(!restored.includes("echo edited"), "hand edit survived inside owned block");
+  });
+});
+
+Deno.test("plugin sync re-renders the Dockerfile block after a config edit (sha bump)", async () => {
+  await withTmpDir(async (dir) => {
+    await addPluginToWorkspace({ cwd: dir, plugin: "telegram" });
+    const configPath = join(dir, ".apfelkaefig.json");
+    const newSha = "a".repeat(40);
+    const config = JSON.parse(await Deno.readTextFile(configPath));
+    config.plugins.telegram.sha = newSha;
+    await Deno.writeTextFile(configPath, JSON.stringify(config, null, 2));
+
+    const code = await syncPluginBlocks({ cwd: dir });
+    assertEquals(code, 0);
+    const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
+    assert(
+      dockerfile.includes(`TELEGRAM_CLI_SHA=${newSha}`),
+      "sync did not propagate the bumped sha into the Dockerfile block",
     );
+  });
+});
+
+Deno.test("plugin sync without a config errors cleanly", async () => {
+  await withTmpDir(async (dir) => {
+    assertEquals(await syncPluginBlocks({ cwd: dir }), 1);
   });
 });
 
@@ -132,7 +153,7 @@ Deno.test("init --plugins 1password writes plugin config", async () => {
     await runInit({ cwd: dir, plugins: ["1password"] });
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins["1password"].enabled, true);
-    assertEquals(config.secrets.onepassword, true);
+    assertEquals(config.secrets, undefined);
   });
 });
 
@@ -141,7 +162,7 @@ Deno.test("init --plugins crit writes plugin config", async () => {
     await runInit({ cwd: dir, plugins: ["crit"] });
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins.crit.enabled, true);
-    assertEquals(config.ports[0].host, 3247);
+    assertEquals(config.plugins.crit.port, 3247);
   });
 });
 
@@ -154,10 +175,9 @@ Deno.test("plugin add telegram writes config, Dockerfile block, and volume mount
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
     assertEquals(config.plugins.telegram.enabled, true);
     assertEquals(config.plugins.telegram.storage, "instance");
-    assertEquals(config.image, { dockerfile: ".devcontainer/Dockerfile" });
-    assertEquals(config.mounts.length, 2);
-    assertEquals(config.mounts[0].type, "volume");
-    assertEquals(config.mounts[0].target, "/home/node/.config/telegram-cli");
+    // Mounts and image resolve at runtime from the plugins section (tasks/011).
+    assertEquals(config.image, undefined);
+    assertEquals(config.mounts, undefined);
 
     const dockerfile = await Deno.readTextFile(join(dir, ".devcontainer/Dockerfile"));
     assert(dockerfile.includes("# >>> akf plugin: telegram"));
@@ -212,6 +232,6 @@ Deno.test("plugin add telegram with userIsolation renders sudo wrapper block", a
     assert(dockerfile.includes("sudo -u telegram"));
     assert(dockerfile.includes("/etc/sudoers.d/akf-telegram"));
     const config = JSON.parse(await Deno.readTextFile(join(dir, ".apfelkaefig.json")));
-    assertEquals(config.mounts[0].target, "/home/telegram/.config/telegram-cli");
+    assertEquals(config.mounts, undefined);
   });
 });

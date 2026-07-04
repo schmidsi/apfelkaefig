@@ -23,8 +23,14 @@
 // volume like any other.
 
 import { join } from "@std/path";
-import { projectSlug, readTextIfPresent } from "../../lib/fs.ts";
-import type { BuiltInPlugin, PluginDoctorCheck, PluginDoctorContext } from "../types.ts";
+import { djb2Hex, projectSlug, readTextIfPresent } from "../../lib/fs.ts";
+import { expandHome, substitute } from "../../lib/substitute.ts";
+import type {
+  BuiltInPlugin,
+  PluginDoctorCheck,
+  PluginDoctorContext,
+  PreRunResult,
+} from "../types.ts";
 import { type ApfelkaefigConfig, type MountConfig, VOLUME_NAME_RE } from "../../lib/schema.ts";
 
 const DEFAULT_KEY = "${localEnv:HOME}/.ssh/id_ed25519.pub";
@@ -50,6 +56,41 @@ export const sshPlugin: BuiltInPlugin = {
   id: "ssh",
   aliases: [],
   description: "Run sshd in the sandbox so desktop agents can attach over SSH (`akf up --serve`).",
+  configSchema: {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "enabled",
+      "authorizedKey",
+      "port",
+    ],
+    "description":
+      "Run sshd in the sandbox so the Claude Code / Codex desktop apps can attach over SSH. Reachable while `akf up --serve` is running.",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable the SSH integration.",
+      },
+      "authorizedKey": {
+        "type": "string",
+        "description":
+          "Host path to the PUBLIC key authorized to connect. Default ${localEnv:HOME}/.ssh/id_ed25519.pub.",
+      },
+      "port": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 65535,
+        "default": 2222,
+        "description": "Host port (on 127.0.0.1) that the container's :22 is published on.",
+      },
+      "hostKeyVolume": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "description":
+          "Override the derived named volume that persists the sshd host key across runs (so reconnects don't trip known_hosts).",
+      },
+    },
+  },
   validateConfig(config) {
     const allowed = ["enabled", "authorizedKey", "port", "hostKeyVolume"];
     for (const k of Object.keys(config)) {
@@ -82,7 +123,7 @@ export const sshPlugin: BuiltInPlugin = {
     authorizedKey: DEFAULT_KEY,
     port: DEFAULT_PORT,
   },
-  applyConfig(base, raw, ctx) {
+  transformConfig(base, raw, ctx) {
     const config = raw as unknown as SshConfig;
     if (!config.enabled) return base;
 
@@ -145,6 +186,77 @@ export const sshPlugin: BuiltInPlugin = {
     checks.push(await dockerfileBlockCheck(resolved));
     checks.push(await authorizedKeyCheck(config, resolved.workspaceDir));
     return checks;
+  },
+
+  // --- run hooks: `akf up --serve` (tasks/011, step 5) ---
+
+  // The plugin owns the IMAGE + CONFIG above, and the RUN below: --serve
+  // replaces the agent command with the sshd entrypoint, runs as root non-TTY
+  // so logs stream, injects the authorized key via env, and prints the banner.
+  flags: ["serve"],
+  containerName(ctx) {
+    if (!ctx.flags.serve) return undefined;
+    // Path hash for the same reason as the tmux sandbox name: two projects
+    // sharing a basename must not tear down each other's serve box.
+    return `akf-serve-${projectSlug(ctx.workspaceDir)}-${djb2Hex(ctx.workspaceDir)}`;
+  },
+  async preRun(ctx): Promise<PreRunResult> {
+    if (!ctx.flags.serve) return { action: "continue" };
+    const ssh = ctx.config.plugins?.ssh as unknown as SshConfig | undefined;
+    // Unreachable via runUp (the flag-owner check fires first when the plugin
+    // is disabled), kept as a guard for other callers.
+    if (!ssh?.enabled) {
+      console.error("akf up: --serve requires the ssh plugin. Run `akf plugin add ssh` first.");
+      return { action: "exit", code: 1 };
+    }
+    const keyPath = resolveKeyPath(ssh.authorizedKey, ctx.workspaceDir);
+    if (await readTextIfPresent(keyPath) === null) {
+      console.error(
+        `akf up: --serve: authorized key not found at ${keyPath}\n` +
+          `       set 'plugins.ssh.authorizedKey' or create the key, then retry.`,
+      );
+      return { action: "exit", code: 1 };
+    }
+    // Clear an orphan from a previously force-killed --serve: Apple `container`
+    // drops the SIGINT relay and leaves the VM running, which then holds the
+    // host-key volume and bootstrapping a new box fails ("storage device
+    // attachment is invalid"). Best-effort — non-existent name is fine.
+    const name = this.containerName!(ctx)!;
+    await ctx.run("container", ["rm", "-f", name], {
+      stdout: "null",
+      stderr: "piped",
+    });
+    console.error(
+      `akf up: serving sshd — connect with:\n` +
+        `         Host:      ${NODE_USER}@127.0.0.1\n` +
+        `         Port:      ${ssh.port}\n` +
+        `         Identity:  the private key matching ${keyPath}\n` +
+        `         Container: ${name} (for \`container logs\`)\n` +
+        `       logs follow; Ctrl+C to stop.`,
+    );
+    return {
+      action: "continue",
+      overrides: {
+        command: [ENTRYPOINT],
+        // Root so sshd can bind :22 and authenticate the login as the agent
+        // user; non-TTY so stdout/stderr stream as logs.
+        user: "root",
+        tty: false,
+        // Apple `container`'s non-TTY signal relay drops SIGINT ("missing
+        // signal in xpc message") — teardown must go by name from the host.
+        stopByNameOnInterrupt: true,
+      },
+    };
+  },
+  // The authorized key is passed at run time as env (a public key — not
+  // secret) rather than mounted, so it works regardless of whether Apple
+  // `container` supports single-file bind mounts.
+  async runtimeEnv(ctx): Promise<Record<string, string>> {
+    if (!ctx.flags.serve) return {};
+    const ssh = ctx.config.plugins?.ssh as unknown as SshConfig | undefined;
+    if (!ssh?.enabled) return {};
+    const pubKey = await readTextIfPresent(resolveKeyPath(ssh.authorizedKey, ctx.workspaceDir));
+    return pubKey === null ? {} : { AKF_SSH_AUTHORIZED_KEY: pubKey.trim() };
   },
   setupSteps(_raw) {
     return [
@@ -218,15 +330,15 @@ async function authorizedKeyCheck(
   return { label: "ssh key", severity: "ok", detail: `authorized key ${path}` };
 }
 
-// Resolve ${localEnv:HOME} / ${localWorkspaceFolder} / ~ in the configured key
-// path for the doctor's host-side existence check. Mirrors the tokens config.ts
-// `substitute` handles on the run path, so doctor agrees with what `akf up` reads.
+// Resolve substitutions + `~` in the configured key path. ONE implementation
+// for both the doctor's existence check and the --serve run path, so they can
+// never disagree about which file akf reads.
 export function resolveKeyPath(raw: string, workspaceDir = ""): string {
   const home = Deno.env.get("HOME") ?? "";
-  let p = raw.replace(/\$\{localEnv:HOME\}/g, home);
-  p = p.replaceAll("${localWorkspaceFolder}", workspaceDir);
-  if (p.startsWith("~/")) p = `${home}/${p.slice(2)}`;
-  return p;
+  return expandHome(
+    substitute(raw, { workspaceFolder: workspaceDir, env: Deno.env.toObject() }),
+    home,
+  );
 }
 
 // --- dockerfile rendering ---
@@ -329,5 +441,6 @@ host key persists across runs so reconnects don't trip \`known_hosts\`.
   — \`~/.claude/remote\` landed on virtiofs (the host mount), which rejects chmod on
   socket inodes. A native named volume shadows that subdir to fix it.
 
-Diagnose from the host with \`container logs akf-serve-<projectSlug>\` (sshd auth)
-and, inside the box, \`~/.claude/remote/run/<id>/remote-server.log\` (daemon).`;
+Diagnose from the host with \`container logs <container>\` — the container name
+is printed in the \`akf up --serve\` banner — and, inside the box,
+\`~/.claude/remote/run/<id>/remote-server.log\` (daemon).`;

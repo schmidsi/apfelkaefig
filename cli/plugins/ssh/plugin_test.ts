@@ -10,9 +10,9 @@ function defaults(): Record<string, unknown> {
     : { ...sshPlugin.defaultConfig };
 }
 
-Deno.test("ssh applyConfig: adds host-key volume, published port, and dockerfile", () => {
+Deno.test("ssh transformConfig: adds host-key volume, published port, and dockerfile", () => {
   const base: ApfelkaefigConfig = { version: 1 };
-  const out = sshPlugin.applyConfig(base, defaults(), ctx);
+  const out = sshPlugin.transformConfig!(base, defaults(), ctx);
 
   assertEquals(out.image, { dockerfile: ".devcontainer/Dockerfile" });
 
@@ -27,18 +27,18 @@ Deno.test("ssh applyConfig: adds host-key volume, published port, and dockerfile
   assertEquals(port.host, 2222);
 });
 
-Deno.test("ssh applyConfig: shadows ~/.claude/remote with a native volume", () => {
+Deno.test("ssh transformConfig: shadows ~/.claude/remote with a native volume", () => {
   // The desktop remote server chmod()s its rpc.sock; virtiofs (the ~/.claude
   // host mount) rejects that, so this subdir needs a native (ext4) volume.
-  const out = sshPlugin.applyConfig({ version: 1 }, defaults(), ctx);
+  const out = sshPlugin.transformConfig!({ version: 1 }, defaults(), ctx);
   const vol = (out.mounts ?? []).find((m) => m.target === "/home/node/.claude/remote");
   assert(vol, "remote volume mount missing");
   assertEquals(vol.type, "volume");
   assertEquals(vol.source, "ssh-myproj-remote");
 });
 
-Deno.test("ssh applyConfig: hostKeyVolume override wins", () => {
-  const out = sshPlugin.applyConfig(
+Deno.test("ssh transformConfig: hostKeyVolume override wins", () => {
+  const out = sshPlugin.transformConfig!(
     { version: 1 },
     { ...defaults(), hostKeyVolume: "my-vol" },
     ctx,
@@ -47,9 +47,9 @@ Deno.test("ssh applyConfig: hostKeyVolume override wins", () => {
   assertEquals(vol?.source, "my-vol");
 });
 
-Deno.test("ssh applyConfig: idempotent — no duplicate mounts or ports", () => {
-  const once = sshPlugin.applyConfig({ version: 1 }, defaults(), ctx);
-  const twice = sshPlugin.applyConfig(once, defaults(), ctx);
+Deno.test("ssh transformConfig: idempotent — no duplicate mounts or ports", () => {
+  const once = sshPlugin.transformConfig!({ version: 1 }, defaults(), ctx);
+  const twice = sshPlugin.transformConfig!(once, defaults(), ctx);
   assertEquals(
     (twice.mounts ?? []).filter((m) => m.target === "/var/lib/akf-ssh").length,
     1,
@@ -57,9 +57,9 @@ Deno.test("ssh applyConfig: idempotent — no duplicate mounts or ports", () => 
   assertEquals((twice.ports ?? []).filter((p) => p.container === 22).length, 1);
 });
 
-Deno.test("ssh applyConfig: disabled is a no-op", () => {
+Deno.test("ssh transformConfig: disabled is a no-op", () => {
   const base: ApfelkaefigConfig = { version: 1 };
-  const out = sshPlugin.applyConfig(base, { ...defaults(), enabled: false }, ctx);
+  const out = sshPlugin.transformConfig!(base, { ...defaults(), enabled: false }, ctx);
   assertEquals(out, base);
 });
 
@@ -133,4 +133,115 @@ Deno.test("ssh doctorChecks: fails when the authorized key is missing", async ()
   });
   const keyCheck = checks.find((c) => c.label === "ssh key");
   assertEquals(keyCheck?.severity, "fail");
+});
+
+// --- run hooks (--serve) ---
+
+import { withTmpDir } from "../../lib/test_util.ts";
+import type { RunContext } from "../types.ts";
+import type { Runner } from "../../lib/container.ts";
+
+function runCtx(
+  overrides: Partial<RunContext> & { run: Runner },
+): RunContext {
+  return {
+    config: { version: 1 },
+    workspaceDir: "/Users/me/myproj",
+    command: ["claude"],
+    flags: {},
+    ...overrides,
+  };
+}
+
+const noopRun: Runner = () => Promise.resolve({ code: 0, stdout: "", stderr: "" });
+
+Deno.test("ssh containerName: claims only in --serve mode, with a path hash", () => {
+  assertEquals(sshPlugin.containerName!(runCtx({ run: noopRun })), undefined);
+  const name = sshPlugin.containerName!(runCtx({ run: noopRun, flags: { serve: true } }));
+  assert(name && /^akf-serve-myproj-[0-9a-f]{8}$/.test(name), `unexpected name: ${name}`);
+  // Same basename, different path → different serve box name.
+  const other = sshPlugin.containerName!(
+    runCtx({ run: noopRun, flags: { serve: true }, workspaceDir: "/Users/me/oss/myproj" }),
+  );
+  assert(name !== other, "same-basename projects collided on serve container name");
+});
+
+Deno.test("ssh preRun: no-op without the serve flag", async () => {
+  const result = await sshPlugin.preRun!(runCtx({ run: noopRun }));
+  assertEquals(result, { action: "continue" });
+});
+
+Deno.test("ssh preRun: missing authorized key exits 1", async () => {
+  await withTmpDir(async (dir) => {
+    const result = await sshPlugin.preRun!(runCtx({
+      run: noopRun,
+      workspaceDir: dir,
+      flags: { serve: true },
+      config: {
+        version: 1,
+        plugins: {
+          ssh: { enabled: true, authorizedKey: `${dir}/nope.pub`, port: 2222 },
+        },
+      },
+    }));
+    assertEquals(result, { action: "exit", code: 1 });
+  });
+});
+
+Deno.test("ssh preRun: serve clears the orphan and returns run overrides", async () => {
+  await withTmpDir(async (dir) => {
+    const keyPath = `${dir}/key.pub`;
+    await Deno.writeTextFile(keyPath, "ssh-ed25519 AAAA test@host\n");
+    const calls: string[][] = [];
+    const run: Runner = (_cmd, args) => {
+      calls.push(args);
+      return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+    };
+    const c = runCtx({
+      run,
+      workspaceDir: dir,
+      flags: { serve: true },
+      config: {
+        version: 1,
+        plugins: { ssh: { enabled: true, authorizedKey: keyPath, port: 2222 } },
+      },
+    });
+    const result = await sshPlugin.preRun!(c);
+    assert(result.action === "continue", `expected continue, got ${result.action}`);
+    assertEquals(result.overrides, {
+      command: ["/usr/local/bin/akf-sshd"],
+      user: "root",
+      tty: false,
+      stopByNameOnInterrupt: true,
+    });
+    const rm = calls.find((a) => a[0] === "rm");
+    assertEquals(rm, ["rm", "-f", sshPlugin.containerName!(c)!]);
+  });
+});
+
+Deno.test("ssh runtimeEnv: injects the authorized key in serve mode only", async () => {
+  await withTmpDir(async (dir) => {
+    const keyPath = `${dir}/key.pub`;
+    await Deno.writeTextFile(keyPath, "ssh-ed25519 AAAA test@host\n");
+    const config = {
+      version: 1 as const,
+      plugins: { ssh: { enabled: true, authorizedKey: keyPath, port: 2222 } },
+    };
+    assertEquals(
+      await sshPlugin.runtimeEnv!(runCtx({ run: noopRun, workspaceDir: dir, config })),
+      {},
+    );
+    assertEquals(
+      await sshPlugin.runtimeEnv!(
+        runCtx({ run: noopRun, workspaceDir: dir, config, flags: { serve: true } }),
+      ),
+      { AKF_SSH_AUTHORIZED_KEY: "ssh-ed25519 AAAA test@host" },
+    );
+  });
+});
+
+Deno.test("resolveKeyPath: leading ~ expands like the run path now", () => {
+  const home = Deno.env.get("HOME") ?? "";
+  assertEquals(resolveKeyPath("~/x.pub"), `${home}/x.pub`);
+  assertEquals(resolveKeyPath("${localEnv:HOME}/x.pub"), `${home}/x.pub`);
 });

@@ -4,9 +4,7 @@
 import { isAbsolute, join } from "@std/path";
 import { builtInImage, materializeEmbeddedDockerfile, sandboxStamp } from "../lib/baseimage.ts";
 import {
-  buildExecArgs,
   buildRunArgs,
-  containerIsRunning,
   containerVersion,
   ensureContainerSystem,
   ensureVolumes,
@@ -17,7 +15,6 @@ import {
   realRunner,
   resolveImageRef,
   type Runner,
-  sandboxContainerName,
   stopContainer,
 } from "../lib/container.ts";
 import {
@@ -27,10 +24,20 @@ import {
   refreshCredentials,
   runAuthWizard,
 } from "../lib/claude_creds.ts";
+// substitute stays imported for the credential-profile resolution below; the
+// serve path's own use moved into the ssh plugin (tasks/011 step 5).
 import { ConfigError, effective, resolveConfig, substitute } from "../lib/config.ts";
-import { projectSlug } from "../lib/fs.ts";
-import { TMUX_SESSION } from "../lib/schema.ts";
-import { resolveOp, SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
+import { migrateMaterializedConfig } from "../lib/migrate.ts";
+import {
+  type BuiltInPlugin,
+  getPlugin,
+  type PluginId,
+  type RunContext,
+  type RunOverrides,
+} from "../lib/plugins.ts";
+import { pluginOwningFlag } from "../lib/flags.ts";
+import { tmuxPlugin } from "../plugins/tmux/plugin.ts";
+import { SecretsRequiredError, TruncatedTokenError } from "../lib/secrets.ts";
 import { runBuild } from "./build.ts";
 
 export interface UpOptions {
@@ -53,8 +60,6 @@ export interface UpOptions {
   tmux?: boolean;
   run?: Runner;
 }
-
-const SSH_ENTRYPOINT = "/usr/local/bin/akf-sshd";
 
 export async function runUp(opts: UpOptions): Promise<number> {
   const run = opts.run ?? realRunner;
@@ -86,30 +91,108 @@ export async function runUp(opts: UpOptions): Promise<number> {
 
   for (const w of resolved.warnings) console.error(`warning: ${w}`);
 
+  // Self-heal configs that predate resolve-time plugin transforms (tasks/011):
+  // strip materialized entries the plugins now derive. Behavior is unchanged
+  // either way (runtime dedupe), so a migration failure must never block up.
+  if (resolved.source.kind === "apfelkaefig") {
+    try {
+      const migration = await migrateMaterializedConfig({
+        configPath: resolved.source.path,
+        workspaceDir: resolved.workspaceDir,
+      });
+      if (migration?.rewritten) {
+        console.error(
+          `akf up: updated .apfelkaefig.json — removed ${migration.removed.length} ` +
+            `entr${migration.removed.length === 1 ? "y" : "ies"} now derived by plugins ` +
+            `(backup: ${migration.backupPath})`,
+        );
+      } else if (migration) {
+        console.error(
+          `akf up: note — these .apfelkaefig.json entries are now derived by plugins ` +
+            `and can be removed: ${migration.removed.join(", ")}`,
+        );
+      }
+    } catch (err) {
+      console.error(`warning: config migration check failed: ${(err as Error).message}`);
+    }
+  }
+
   // Ensure the container system is up before we query running containers or run.
   await ensureContainerSystem(run);
 
-  // tmux multiplexing: when enabled, a second `akf up` from another terminal
-  // should attach to the same running container rather than starting a new one.
-  // (--serve runs sshd, not the agent, so it opts out.)
+  // Run-hook plugins (tasks/011): every enabled config plugin participates,
+  // plus the internal tmux plugin when the top-level `tmux` key or the --tmux
+  // flag enables it. (--serve replaces the command wholesale, so it opts out
+  // of tmux.)
   const eff = effective(resolved);
   const tmuxEnabled = (opts.tmux ?? eff.tmux) && !opts.serve;
-  let sandboxName: string | undefined;
-  if (tmuxEnabled) {
-    sandboxName = sandboxContainerName(resolved.workspaceDir);
-    if (await containerIsRunning(sandboxName, run)) {
+  const runtimePlugins: BuiltInPlugin[] = Object.entries(resolved.config.plugins ?? {})
+    .filter(([, pc]) => pc?.enabled)
+    .map(([id]) => getPlugin(id as PluginId));
+  // 1Password is implicit-on (inject when a token is present, even with no
+  // config at all) — include its runtime hooks unless the config has an
+  // explicit plugins.1password section, in which case the loop above decides.
+  if (resolved.config.plugins?.["1password"] === undefined) {
+    runtimePlugins.push(getPlugin("1password"));
+  }
+  if (tmuxEnabled) runtimePlugins.push(tmuxPlugin);
+
+  const runCtx: RunContext = {
+    config: resolved.config,
+    workspaceDir: resolved.workspaceDir,
+    command: eff.command,
+    flags: { tmux: opts.tmux === true, serve: opts.serve === true },
+    run,
+  };
+
+  // A plugin-declared flag only works when its owning plugin is active for
+  // this run (e.g. --serve without the ssh plugin enabled).
+  for (const [flag, on] of Object.entries(runCtx.flags)) {
+    if (!on) continue;
+    const owner = pluginOwningFlag(flag);
+    if (owner && !runtimePlugins.includes(owner)) {
       console.error(
-        `akf up: attaching to running sandbox '${sandboxName}' ` +
-          `(tmux session '${TMUX_SESSION}'; Ctrl+B c for a new window, Ctrl+B d to detach)…`,
+        `akf up: --${flag} requires the '${owner.id}' plugin. ` +
+          `Run \`akf plugin add ${owner.id}\` first.`,
       );
-      const command = opts.positional.length > 0 ? opts.positional : eff.command;
-      const execArgs = buildExecArgs(sandboxName, command);
-      debugCmd(execArgs);
-      return await spawnInteractive(execArgs);
+      return 1;
     }
-    // Clear a stopped orphan of the same name so `container run --name` below
-    // doesn't collide. Safe: only reached when it isn't running.
-    await run("container", ["rm", "-f", sandboxName], { stdout: "null", stderr: "piped" });
+  }
+
+  // containerName is exclusive — two non-undefined claims is a plugin-author
+  // error. (A plugin may decline by returning undefined, e.g. ssh outside
+  // --serve mode.)
+  const nameClaims = runtimePlugins
+    .map((p) => ({ id: p.id, name: p.containerName?.(runCtx) }))
+    .filter((c) => c.name !== undefined);
+  if (nameClaims.length > 1) {
+    console.error(
+      `akf up: plugins ${nameClaims.map((c) => `'${c.id}'`).join(" and ")} ` +
+        `both claim the container name`,
+    );
+    return 1;
+  }
+  const sandboxName = nameClaims[0]?.name;
+
+  // preRun in config order: validation, attach-vs-run branches, orphan
+  // cleanup, run overrides (--serve's sshd entrypoint). Overrides are
+  // exclusive across plugins.
+  let overrides: RunOverrides | undefined;
+  for (const plugin of runtimePlugins) {
+    if (!plugin.preRun) continue;
+    const result = await plugin.preRun(runCtx);
+    if (result.action === "exit") return result.code;
+    if (result.action === "attach") {
+      debugCmd(result.args);
+      return await spawnInteractive(result.args);
+    }
+    if (result.overrides) {
+      if (overrides) {
+        console.error(`akf up: plugin '${plugin.id}' overrides an already-overridden run`);
+        return 1;
+      }
+      overrides = result.overrides;
+    }
   }
 
   // Ensure the sandbox's own Claude login (see cli/lib/claude_creds.ts) before
@@ -238,11 +321,14 @@ export async function runUp(opts: UpOptions): Promise<number> {
     return 1;
   }
 
-  // 1Password injection.
+  // runtimeEnv hooks: env injected at run time (OP token, …), never persisted.
   let extraEnv: Record<string, string> | undefined;
   try {
-    const token = await resolveOp({ explicit: resolved.config.secrets?.onepassword });
-    if (token) extraEnv = { OP_SERVICE_ACCOUNT_TOKEN: token };
+    for (const plugin of runtimePlugins) {
+      if (!plugin.runtimeEnv) continue;
+      const env = await plugin.runtimeEnv(runCtx);
+      if (Object.keys(env).length > 0) extraEnv = { ...extraEnv, ...env };
+    }
   } catch (err) {
     if (err instanceof SecretsRequiredError || err instanceof TruncatedTokenError) {
       console.error(`akf up: ${err.message}`);
@@ -251,65 +337,13 @@ export async function runUp(opts: UpOptions): Promise<number> {
     throw err;
   }
 
-  // --serve: run sshd in the foreground instead of the agent. Validate the ssh
-  // plugin is enabled, read the authorized public key from the host, and inject
-  // it as env for the entrypoint to install. The host key + port + persistence
-  // come from the ssh plugin's config.
-  let commandOverride: string[] | undefined;
-  let userOverride: string | undefined;
-  let tty: boolean | undefined;
-  let serveName: string | undefined;
-  if (opts.serve) {
-    const ssh = resolved.config.plugins?.ssh;
-    if (!ssh?.enabled) {
-      console.error(
-        "akf up: --serve requires the ssh plugin. Run `akf plugin add ssh` first.",
-      );
-      return 1;
-    }
-    const keyPath = substitute(ssh.authorizedKey, {
-      workspaceFolder: resolved.workspaceDir,
-      env: Deno.env.toObject(),
-    });
-    let pubKey: string;
-    try {
-      pubKey = (await Deno.readTextFile(keyPath)).trim();
-    } catch (err) {
-      if (err instanceof Deno.errors.NotFound) {
-        console.error(
-          `akf up: --serve: authorized key not found at ${keyPath}\n` +
-            `       set 'plugins.ssh.authorizedKey' or create the key, then retry.`,
-        );
-        return 1;
-      }
-      throw err;
-    }
-    extraEnv = { ...extraEnv, AKF_SSH_AUTHORIZED_KEY: pubKey };
-    commandOverride = [SSH_ENTRYPOINT];
-    userOverride = "root";
-    tty = false;
-    serveName = `akf-serve-${projectSlug(resolved.workspaceDir)}`;
-    // Clear an orphan from a previously force-killed --serve: Apple `container`
-    // drops the SIGINT relay and leaves the VM running, which then holds the
-    // host-key volume and bootstrapping a new box fails ("storage device
-    // attachment is invalid"). Best-effort — non-existent name is fine.
-    await run("container", ["rm", "-f", serveName], { stdout: "null", stderr: "piped" });
-    console.error(
-      `akf up: serving sshd — connect with:\n` +
-        `         Host:     node@127.0.0.1\n` +
-        `         Port:     ${ssh.port}\n` +
-        `         Identity: the private key matching ${keyPath}\n` +
-        `       logs follow; Ctrl+C to stop.`,
-    );
-  }
-
   // Apple `container` named volumes attach to one running VM at a time. If this
   // project mounts named volumes and another container off the same image is
   // already running, starting a new box fails with the opaque "storage device
   // attachment is invalid". Detect that up front and explain (tmux mode is the
-  // fix; a leftover non-tmux box just needs removing). Skipped for --serve,
-  // which runs its own named box and clears its own orphan by name above.
-  if (!opts.serve && (resolved.config.mounts ?? []).some((m) => m.type === "volume")) {
+  // fix; a leftover non-tmux box just needs removing). A plugin's own orphan
+  // was already cleared by name in its preRun, so it won't trip this.
+  if ((resolved.config.mounts ?? []).some((m) => m.type === "volume")) {
     const sameImage = (a: string, b: string) =>
       a.replace(/:latest$/, "") === b.replace(/:latest$/, "");
     const orphan = (await listContainers(run)).find(
@@ -330,15 +364,27 @@ export async function runUp(opts: UpOptions): Promise<number> {
     }
   }
 
+  // Let run-hook plugins wrap the agent command (tmux session, …), unless a
+  // preRun override (--serve's sshd entrypoint) replaces it wholesale —
+  // replacement beats wrapping.
+  let commandOverride = overrides?.command;
+  if (commandOverride === undefined) {
+    let command = eff.command;
+    for (const plugin of runtimePlugins) {
+      if (plugin.wrapCommand) command = plugin.wrapCommand(command, runCtx);
+    }
+    if (command !== eff.command) commandOverride = command;
+  }
+
   const built = buildRunArgs({
     resolved,
     workspaceHostPath: resolved.workspaceDir,
     imageRef: image.ref,
     extraEnv,
     commandOverride,
-    userOverride,
-    tty,
-    name: serveName ?? sandboxName,
+    userOverride: overrides?.user,
+    tty: overrides?.tty,
+    name: sandboxName,
     claudeCredentialsFile,
   });
 
@@ -353,13 +399,14 @@ export async function runUp(opts: UpOptions): Promise<number> {
     stderr: "inherit",
   });
   const child = cmd.spawn();
+  const stopByName = overrides?.stopByNameOnInterrupt ? sandboxName : undefined;
   const onSig = () => {
-    if (serveName) {
-      // Non-TTY server: Apple `container`'s interactive signal relay drops the
-      // SIGINT ("missing signal in xpc message"), so forwarding to `container
-      // run` would leave the box running. Stop it by name from the host side
-      // instead — that ends the run, and `--rm` cleans up.
-      stopContainer(serveName, run).catch(() => {});
+    if (stopByName) {
+      // Non-TTY server (--serve): Apple `container`'s interactive signal relay
+      // drops the SIGINT ("missing signal in xpc message"), so forwarding to
+      // `container run` would leave the box running. Stop it by name from the
+      // host side instead — that ends the run, and `--rm` cleans up.
+      stopContainer(stopByName, run).catch(() => {});
       return;
     }
     try {
