@@ -4,9 +4,11 @@ import {
   akfCredentialsFile,
   akfProfileDir,
   checkCredentials,
+  exportKeychainCredential,
   profileSlug,
   refreshCredentials,
 } from "./claude_creds.ts";
+import type { Runner } from "./container.ts";
 import { withTmpDir } from "./test_util.ts";
 
 const NOW = 1_700_000_000_000;
@@ -167,6 +169,53 @@ Deno.test("refreshCredentials: 404 on the first endpoint, success on the second"
     // No refresh_token in the response → keep the old one.
     assertEquals(written.refreshToken, "rt-old");
   });
+});
+
+Deno.test("exportKeychainCredential: writes the keychain value with the sha256 suffix", async () => {
+  await withTmpDir(async (dir) => {
+    const services: string[] = [];
+    const run: Runner = (_cmd, args) => {
+      services.push(args[2]);
+      return Promise.resolve({ code: 0, stdout: CRED_KEYCHAIN + "\n", stderr: "" });
+    };
+    const credPath = `${dir}/.credentials.json`;
+    const ok = await exportKeychainCredential(
+      "/Users/schmidsi/.local/state/apfelkaefig/claude",
+      credPath,
+      { os: "darwin", run },
+    );
+    assertEquals(ok, true);
+    // sha256("/Users/schmidsi/.local/state/apfelkaefig/claude")[:8] — verified
+    // against the entry a real login created.
+    assertEquals(services, ["Claude Code-credentials-ba15feac"]);
+    assertEquals(await Deno.readTextFile(credPath), CRED_KEYCHAIN);
+    assertEquals((await Deno.stat(credPath)).mode! & 0o777, 0o600);
+  });
+});
+
+Deno.test("exportKeychainCredential: false on non-macOS, missing entry, or non-JSON", async () => {
+  await withTmpDir(async (dir) => {
+    const credPath = `${dir}/.credentials.json`;
+    const okRun: Runner = () => Promise.resolve({ code: 0, stdout: CRED_KEYCHAIN, stderr: "" });
+    assertEquals(
+      await exportKeychainCredential("/d", credPath, { os: "linux", run: okRun }),
+      false,
+    );
+    const missing: Runner = () => Promise.resolve({ code: 44, stdout: "", stderr: "not found" });
+    assertEquals(
+      await exportKeychainCredential("/d", credPath, { os: "darwin", run: missing }),
+      false,
+    );
+    const garbage: Runner = () => Promise.resolve({ code: 0, stdout: "not-json", stderr: "" });
+    assertEquals(
+      await exportKeychainCredential("/d", credPath, { os: "darwin", run: garbage }),
+      false,
+    );
+  });
+});
+
+const CRED_KEYCHAIN = JSON.stringify({
+  claudeAiOauth: { accessToken: "at-kc", refreshToken: "rt-kc", expiresAt: 9e15 },
 });
 
 Deno.test("refreshCredentials: auth-needed when the file has no refresh token", async () => {

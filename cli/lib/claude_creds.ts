@@ -17,6 +17,7 @@
 //   - The host's own login is never read or touched again.
 
 import { basename, join } from "@std/path";
+import { realRunner, type Runner } from "./container.ts";
 
 // Lineages are per *environment*, not per project: a project's
 // `claudeConfigDir` (e.g. `~/.claude-ens` for work vs the `~/.claude` default)
@@ -190,7 +191,46 @@ export async function runAuthWizard(home: string, slug = "claude"): Promise<bool
     throw err;
   }
   // Trust the credential file, not the exit code: what matters is whether a
-  // parseable credential landed in the profile dir.
-  const check = await checkCredentials(home, { slug });
+  // parseable credential landed in the profile dir. On macOS `claude auth
+  // login` stores Keychain-only, so export it to the file sandboxes mount.
+  let check = await checkCredentials(home, { slug });
+  if (check.state === "missing" || check.state === "invalid") {
+    await exportKeychainCredential(dir, akfCredentialsFile(home, slug));
+    check = await checkCredentials(home, { slug });
+  }
   return check.state === "valid" || check.state === "expired";
+}
+
+// macOS stores a custom CLAUDE_CONFIG_DIR's credential under the Keychain
+// service "Claude Code-credentials-<first 8 hex of sha256(dir)>" (verified
+// empirically: sha256("…/apfelkaefig/claude")[:8] matched the entry created
+// by a real login). Copy it into the profile's .credentials.json once — from
+// then on the sandbox rotates the file and the Keychain copy goes stale
+// unused, which is fine: this lineage belongs to the sandboxes.
+export async function exportKeychainCredential(
+  configDir: string,
+  credPath: string,
+  opts: { os?: string; run?: Runner } = {},
+): Promise<boolean> {
+  if ((opts.os ?? Deno.build.os) !== "darwin") return false;
+  const run = opts.run ?? realRunner;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(configDir));
+  const suffix = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 8);
+  const r = await run(
+    "security",
+    ["find-generic-password", "-s", `Claude Code-credentials-${suffix}`, "-w"],
+    { stdout: "piped", stderr: "null" },
+  );
+  if (r.code !== 0) return false;
+  const cred = r.stdout.trim();
+  try {
+    JSON.parse(cred);
+  } catch {
+    return false;
+  }
+  await Deno.writeFile(credPath, new TextEncoder().encode(cred), { mode: 0o600 });
+  return true;
 }
