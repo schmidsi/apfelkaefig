@@ -23,6 +23,7 @@ import {
 import {
   akfCredentialsFile,
   checkCredentials,
+  profileSlug,
   refreshCredentials,
   runAuthWizard,
 } from "../lib/claude_creds.ts";
@@ -113,9 +114,19 @@ export async function runUp(opts: UpOptions): Promise<number> {
 
   // Ensure the sandbox's own Claude login (see cli/lib/claude_creds.ts) before
   // anything slow: first `akf up` runs the one-time host-side login, later runs
-  // detect expiry (refresh in place) or a dead credential (re-auth).
+  // detect expiry (refresh in place) or a dead credential (re-auth). Lineages
+  // are per environment: the project's claudeConfigDir (work vs personal)
+  // selects which sandbox login it uses.
   const runsClaude = eff.command[0] === "claude" || opts.serve === true;
-  const creds = await ensureClaudeCreds(runsClaude, run);
+  const slug = profileSlug(
+    eff.claudeConfigDir
+      ? substitute(eff.claudeConfigDir, {
+        workspaceFolder: resolved.workspaceDir,
+        env: Deno.env.toObject(),
+      })
+      : undefined,
+  );
+  const creds = await ensureClaudeCreds(runsClaude, slug, run);
   if (creds.abort !== undefined) return creds.abort;
   const claudeCredentialsFile = creds.path;
 
@@ -374,11 +385,12 @@ export async function runUp(opts: UpOptions): Promise<number> {
 // a non-claude command with no stored login just runs without the overlay.
 async function ensureClaudeCreds(
   runsClaude: boolean,
+  slug: string,
   run: Runner,
 ): Promise<{ path?: string; abort?: number }> {
   const home = Deno.env.get("HOME");
   if (!home) return {};
-  const check = await checkCredentials(home);
+  const check = await checkCredentials(home, { slug });
   if (check.state === "valid") return { path: check.path };
 
   if (check.state === "expired") {
@@ -405,19 +417,19 @@ async function ensureClaudeCreds(
 
   if (!runsClaude) return {};
   if (!Deno.stdin.isTerminal()) {
-    console.error("akf up: the sandbox needs a Claude login — run `akf auth` first.");
+    console.error(`akf up: the sandbox needs a Claude login — run \`akf auth\` first.`);
     return { abort: 1 };
   }
   console.error(
     check.state === "missing"
-      ? "akf up: no sandbox Claude login yet — running the one-time setup."
-      : "akf up: re-establishing the sandbox's Claude login.",
+      ? `akf up: no sandbox Claude login for profile '${slug}' yet — running the one-time setup.`
+      : `akf up: re-establishing the sandbox's Claude login ('${slug}').`,
   );
-  if (!(await runAuthWizard(home))) {
+  if (!(await runAuthWizard(home, slug))) {
     console.error("akf up: login did not complete — run `akf auth` to retry.");
     return { abort: 1 };
   }
-  return { path: akfCredentialsFile(home) };
+  return { path: akfCredentialsFile(home, slug) };
 }
 
 // Cheap reachability probe: can we reach the network at all? Used before a

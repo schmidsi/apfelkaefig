@@ -16,16 +16,29 @@
 //     self-maintains: short-lived access tokens, rotating refresh token.
 //   - The host's own login is never read or touched again.
 
-import { join } from "@std/path";
+import { basename, join } from "@std/path";
+
+// Lineages are per *environment*, not per project: a project's
+// `claudeConfigDir` (e.g. `~/.claude-ens` for work vs the `~/.claude` default)
+// selects which sandbox login it uses. Projects sharing a claudeConfigDir
+// share a lineage; the default maps to slug "claude".
+export function profileSlug(claudeConfigDir?: string): string {
+  if (!claudeConfigDir) return "claude";
+  const slug = basename(claudeConfigDir)
+    .replace(/^\./, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-");
+  return slug || "claude";
+}
 
 // CLAUDE_CONFIG_DIR for the akf-owned login. Lives under XDG state, not
 // ~/.claude*, so host `claude` never picks it up by accident.
-export function akfProfileDir(home: string): string {
-  return join(home, ".local", "state", "apfelkaefig", "claude");
+export function akfProfileDir(home: string, slug = "claude"): string {
+  return join(home, ".local", "state", "apfelkaefig", slug);
 }
 
-export function akfCredentialsFile(home: string): string {
-  return join(akfProfileDir(home), ".credentials.json");
+export function akfCredentialsFile(home: string, slug = "claude"): string {
+  return join(akfProfileDir(home, slug), ".credentials.json");
 }
 
 export type CredentialCheck =
@@ -42,9 +55,10 @@ const EXPIRY_MARGIN_MS = 5 * 60 * 1000;
 
 export async function checkCredentials(
   home: string,
-  now: number = Date.now(),
+  opts: { slug?: string; now?: number } = {},
 ): Promise<CredentialCheck> {
-  const path = akfCredentialsFile(home);
+  const now = opts.now ?? Date.now();
+  const path = akfCredentialsFile(home, opts.slug);
   let raw: string;
   try {
     raw = await Deno.readTextFile(path);
@@ -152,12 +166,13 @@ export async function refreshCredentials(
 // itself: with no credential in CLAUDE_CONFIG_DIR it opens the login flow
 // (browser + paste work natively on the host, unlike through the container
 // TTY). After login it drops into the REPL — the user exits to continue.
-export async function runAuthWizard(home: string): Promise<boolean> {
-  const dir = akfProfileDir(home);
+export async function runAuthWizard(home: string, slug = "claude"): Promise<boolean> {
+  const dir = akfProfileDir(home, slug);
   await Deno.mkdir(dir, { recursive: true });
   console.error(
-    `akf auth: opening Claude login for the sandbox profile (${dir}).\n` +
-      `          Complete the login in the browser; once you land in the Claude\n` +
+    `akf auth: opening Claude login for the sandbox profile '${slug}' (${dir}).\n` +
+      `          The browser uses whichever claude.ai account is signed in — make\n` +
+      `          sure it's the right one for '${slug}'. Once you land in the Claude\n` +
       `          prompt, exit it (type /exit or press Ctrl+C twice) to continue.`,
   );
   let status: Deno.CommandStatus;
@@ -178,7 +193,7 @@ export async function runAuthWizard(home: string): Promise<boolean> {
   }
   // Exit code is unreliable (Ctrl+C out of the REPL is normal) — what matters
   // is whether a parseable credential landed.
-  const check = await checkCredentials(home);
+  const check = await checkCredentials(home, { slug });
   if (check.state === "valid" || check.state === "expired") return true;
   if (status.code !== 0) return false;
   return false;

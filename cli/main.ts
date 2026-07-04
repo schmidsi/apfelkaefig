@@ -23,8 +23,11 @@ Usage:
                            --tmux shares one container across terminals: a second
                            'akf up --tmux' attaches to the running box's tmux
                            session instead of starting a new one.
-  akf auth [--force]       Log the sandbox profile into Claude (one-time; akf up
-                           prompts automatically when it's needed).
+  akf auth [--force] [--profile <name>]
+                           Log a sandbox profile into Claude (one-time per
+                           environment; akf up prompts automatically when
+                           needed). The project's claudeConfigDir picks the
+                           profile — e.g. ~/.claude-work → 'claude-work'.
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
   akf plugin list|explain|add
@@ -87,8 +90,8 @@ async function main(argv: string[]): Promise<number> {
     case "up":
       return await dispatchUp(rest);
     case "auth": {
-      const authFlags = parseArgs(rest, { boolean: ["force"] });
-      return await runAuth({ force: authFlags.force });
+      const authFlags = parseArgs(rest, { boolean: ["force"], string: ["profile"] });
+      return await runAuth({ force: authFlags.force, profile: authFlags.profile });
     }
     case "init":
       return await dispatchInit(rest);

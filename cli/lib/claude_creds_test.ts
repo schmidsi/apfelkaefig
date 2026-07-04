@@ -4,6 +4,7 @@ import {
   akfCredentialsFile,
   akfProfileDir,
   checkCredentials,
+  profileSlug,
   refreshCredentials,
 } from "./claude_creds.ts";
 import { withTmpDir } from "./test_util.ts";
@@ -33,27 +34,50 @@ async function writeCred(home: string, content: string): Promise<string> {
 Deno.test("akfProfileDir/akfCredentialsFile: under XDG state, not ~/.claude*", () => {
   assertEquals(akfProfileDir("/h"), "/h/.local/state/apfelkaefig/claude");
   assertEquals(akfCredentialsFile("/h"), "/h/.local/state/apfelkaefig/claude/.credentials.json");
+  assertEquals(
+    akfCredentialsFile("/h", "claude-ens"),
+    "/h/.local/state/apfelkaefig/claude-ens/.credentials.json",
+  );
+});
+
+Deno.test("profileSlug: per-environment lineage names from claudeConfigDir", () => {
+  assertEquals(profileSlug(undefined), "claude");
+  assertEquals(profileSlug("/Users/me/.claude"), "claude"); // explicit default = default
+  assertEquals(profileSlug("/Users/me/.claude-ens"), "claude-ens");
+  assertEquals(profileSlug("~/.claude-Work Stuff"), "claude-work-stuff");
+  assertEquals(profileSlug("claude-ens"), "claude-ens"); // bare name (akf auth --profile)
+});
+
+Deno.test("checkCredentials: profiles are isolated lineages", async () => {
+  await withTmpDir(async (home) => {
+    await writeCred(home, credJson(NOW + 3_600_000)); // default profile only
+    assertEquals((await checkCredentials(home, { now: NOW })).state, "valid");
+    assertEquals(
+      (await checkCredentials(home, { slug: "claude-ens", now: NOW })).state,
+      "missing",
+    );
+  });
 });
 
 Deno.test("checkCredentials: missing when no file", async () => {
   await withTmpDir(async (home) => {
-    assertEquals(await checkCredentials(home, NOW), { state: "missing" });
+    assertEquals(await checkCredentials(home, { now: NOW }), { state: "missing" });
   });
 });
 
 Deno.test("checkCredentials: invalid on garbage or wrong shape", async () => {
   await withTmpDir(async (home) => {
     await writeCred(home, "not-json");
-    assertEquals((await checkCredentials(home, NOW)).state, "invalid");
+    assertEquals((await checkCredentials(home, { now: NOW })).state, "invalid");
     await writeCred(home, JSON.stringify({ claudeAiOauth: { accessToken: 5 } }));
-    assertEquals((await checkCredentials(home, NOW)).state, "invalid");
+    assertEquals((await checkCredentials(home, { now: NOW })).state, "invalid");
   });
 });
 
 Deno.test("checkCredentials: valid when the token has real time left", async () => {
   await withTmpDir(async (home) => {
     const path = await writeCred(home, credJson(NOW + 3_600_000));
-    assertEquals(await checkCredentials(home, NOW), {
+    assertEquals(await checkCredentials(home, { now: NOW }), {
       state: "valid",
       path,
       expiresAt: NOW + 3_600_000,
@@ -64,7 +88,7 @@ Deno.test("checkCredentials: valid when the token has real time left", async () 
 Deno.test("checkCredentials: expired when past — or within the safety margin", async () => {
   await withTmpDir(async (home) => {
     const path = await writeCred(home, credJson(NOW + 60_000)); // < 5 min margin
-    assertEquals(await checkCredentials(home, NOW), {
+    assertEquals(await checkCredentials(home, { now: NOW }), {
       state: "expired",
       path,
       refreshToken: "rt-old",
