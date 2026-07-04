@@ -161,29 +161,27 @@ export async function refreshCredentials(
   return "unavailable";
 }
 
-// Run the interactive Claude login on the host, scoped to the akf profile dir.
-// Returns true when a usable credential materialized. The wizard is `claude`
-// itself: with no credential in CLAUDE_CONFIG_DIR it opens the login flow
-// (browser + paste work natively on the host, unlike through the container
-// TTY). After login it drops into the REPL — the user exits to continue.
+// Run `claude auth login` on the host, scoped to the akf profile dir. Returns
+// true when a usable credential materialized. Host-side because browser +
+// paste work natively here, unlike through the container TTY; `auth login`
+// (rather than the bare REPL) exits on its own once the login completes.
 export async function runAuthWizard(home: string, slug = "claude"): Promise<boolean> {
   const dir = akfProfileDir(home, slug);
   await Deno.mkdir(dir, { recursive: true });
   console.error(
     `akf auth: opening Claude login for the sandbox profile '${slug}' (${dir}).\n` +
       `          The browser uses whichever claude.ai account is signed in — make\n` +
-      `          sure it's the right one for '${slug}'. Once you land in the Claude\n` +
-      `          prompt, exit it (type /exit or press Ctrl+C twice) to continue.`,
+      `          sure it's the right one for '${slug}'.`,
   );
-  let status: Deno.CommandStatus;
   try {
     const child = new Deno.Command("claude", {
+      args: ["auth", "login", "--claudeai"],
       env: { ...Deno.env.toObject(), CLAUDE_CONFIG_DIR: dir },
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",
     }).spawn();
-    status = await child.status;
+    await child.status;
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       console.error("akf auth: `claude` not found on PATH — install Claude Code first.");
@@ -191,10 +189,8 @@ export async function runAuthWizard(home: string, slug = "claude"): Promise<bool
     }
     throw err;
   }
-  // Exit code is unreliable (Ctrl+C out of the REPL is normal) — what matters
-  // is whether a parseable credential landed.
+  // Trust the credential file, not the exit code: what matters is whether a
+  // parseable credential landed in the profile dir.
   const check = await checkCredentials(home, { slug });
-  if (check.state === "valid" || check.state === "expired") return true;
-  if (status.code !== 0) return false;
-  return false;
+  return check.state === "valid" || check.state === "expired";
 }
