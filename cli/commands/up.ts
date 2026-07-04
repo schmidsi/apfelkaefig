@@ -20,7 +20,12 @@ import {
   sandboxContainerName,
   stopContainer,
 } from "../lib/container.ts";
-import { stageClaudeCredentials } from "../lib/claude_creds.ts";
+import {
+  akfCredentialsFile,
+  checkCredentials,
+  refreshCredentials,
+  runAuthWizard,
+} from "../lib/claude_creds.ts";
 import { ConfigError, effective, resolveConfig, substitute } from "../lib/config.ts";
 import { projectSlug } from "../lib/fs.ts";
 import { TMUX_SESSION } from "../lib/schema.ts";
@@ -105,6 +110,14 @@ export async function runUp(opts: UpOptions): Promise<number> {
     // doesn't collide. Safe: only reached when it isn't running.
     await run("container", ["rm", "-f", sandboxName], { stdout: "null", stderr: "piped" });
   }
+
+  // Ensure the sandbox's own Claude login (see cli/lib/claude_creds.ts) before
+  // anything slow: first `akf up` runs the one-time host-side login, later runs
+  // detect expiry (refresh in place) or a dead credential (re-auth).
+  const runsClaude = eff.command[0] === "claude" || opts.serve === true;
+  const creds = await ensureClaudeCreds(runsClaude, run);
+  if (creds.abort !== undefined) return creds.abort;
+  const claudeCredentialsFile = creds.path;
 
   // Resolve the built-in base image. When `image/Dockerfile` is embedded in
   // the binary, materialize it into a content-hashed cache dir so the builder
@@ -306,17 +319,6 @@ export async function runUp(opts: UpOptions): Promise<number> {
     }
   }
 
-  // Stage the host's live Claude login so the sandbox doesn't re-auth against a
-  // stale on-disk token (macOS refreshes into the Keychain; see claude_creds).
-  // Best-effort — any failure just falls back to whatever ~/.claude carries.
-  let claudeCredentialsFile: string | undefined;
-  try {
-    const home = Deno.env.get("HOME");
-    if (home) claudeCredentialsFile = (await stageClaudeCredentials({ home })) ?? undefined;
-  } catch (err) {
-    if (Deno.env.get("AKF_DEBUG")) console.error(`akf debug: credential staging skipped: ${err}`);
-  }
-
   const built = buildRunArgs({
     resolved,
     workspaceHostPath: resolved.workspaceDir,
@@ -364,6 +366,58 @@ export async function runUp(opts: UpOptions): Promise<number> {
       Deno.removeSignalListener("SIGINT", onSig);
     } catch (_) { /* ignore */ }
   }
+}
+
+// Ensure the sandbox's Claude credential lineage is present and healthy.
+// Returns the credential file to overlay-mount, or an abort exit code when
+// auth is required but can't be completed here. Neither is also possible —
+// a non-claude command with no stored login just runs without the overlay.
+async function ensureClaudeCreds(
+  runsClaude: boolean,
+  run: Runner,
+): Promise<{ path?: string; abort?: number }> {
+  const home = Deno.env.get("HOME");
+  if (!home) return {};
+  const check = await checkCredentials(home);
+  if (check.state === "valid") return { path: check.path };
+
+  if (check.state === "expired") {
+    // A running sandbox holds the current refresh token in memory and rotates
+    // the file itself; a host-side refresh would race it and can revoke the
+    // token family. Only refresh when no akf box is up.
+    const boxes = await listContainers(run);
+    const akfBoxRunning = boxes.some(
+      (b) => b.id.startsWith("akf-") || /apfelkaefig-base|-sandbox/.test(b.image),
+    );
+    if (akfBoxRunning) return { path: check.path };
+    const r = await refreshCredentials(check.path);
+    if (r === "refreshed") return { path: check.path };
+    if (r === "unavailable") {
+      console.error(
+        "akf up: warning: the sandbox's Claude token is expired and couldn't be " +
+          "refreshed from here — the sandbox will retry on its own.",
+      );
+      return { path: check.path };
+    }
+    // "auth-needed": the refresh token is dead — fall through to a new login.
+    console.error("akf up: the sandbox's Claude login has expired (refresh rejected).");
+  }
+
+  if (!runsClaude) return {};
+  if (!Deno.stdin.isTerminal()) {
+    console.error("akf up: the sandbox needs a Claude login — run `akf auth` first.");
+    return { abort: 1 };
+  }
+  console.error(
+    check.state === "missing"
+      ? "akf up: no sandbox Claude login yet — running the one-time setup."
+      : "akf up: re-establishing the sandbox's Claude login.",
+  );
+  if (!(await runAuthWizard(home))) {
+    console.error("akf up: login did not complete — run `akf auth` to retry.");
+    return { abort: 1 };
+  }
+  return { path: akfCredentialsFile(home) };
 }
 
 // Cheap reachability probe: can we reach the network at all? Used before a

@@ -1,4 +1,5 @@
 import { parseArgs } from "@std/cli/parse-args";
+import { runAuth } from "./commands/auth.ts";
 import { runInit } from "./commands/init.ts";
 import { runUp } from "./commands/up.ts";
 import { runBuild } from "./commands/build.ts";
@@ -22,6 +23,8 @@ Usage:
                            --tmux shares one container across terminals: a second
                            'akf up --tmux' attaches to the running box's tmux
                            session instead of starting a new one.
+  akf auth [--force]       Log the sandbox profile into Claude (one-time; akf up
+                           prompts automatically when it's needed).
   akf init [--advanced|--bash] [--plugins <ids>]
                            Set up the current folder for akf.
   akf plugin list|explain|add
@@ -83,6 +86,10 @@ async function main(argv: string[]): Promise<number> {
   switch (subcommand) {
     case "up":
       return await dispatchUp(rest);
+    case "auth": {
+      const authFlags = parseArgs(rest, { boolean: ["force"] });
+      return await runAuth({ force: authFlags.force });
+    }
     case "init":
       return await dispatchInit(rest);
     case "build":

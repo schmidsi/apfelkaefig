@@ -1,57 +1,185 @@
-// Claude OAuth credential staging (macOS).
+// akf-owned Claude credential lineage.
 //
-// On macOS, Claude Code keeps its OAuth token in the login Keychain and
-// refreshes it there — each refresh rotates the refresh token and leaves the
-// on-disk ~/.claude/.credentials.json stale (expired access token + a refresh
-// token the server has since revoked). The sandbox mounts ~/.claude and reads
-// that stale file, so Claude inside the box can't refresh and is forced to
-// re-login.
+// Why this exists: on macOS, Claude Code refreshes its OAuth token into the
+// login Keychain. Sharing (or copying) the host's credential into sandboxes
+// forks one refresh-token lineage across two clients — whichever refreshes
+// first rotates the other out, and reuse of the stale token can revoke the
+// whole family (host logout). So akf maintains its OWN login instead:
 //
-// To avoid that, `akf up` reads the current credential straight from the
-// Keychain and stages it in akf's cache dir; buildRunArgs then overlay-mounts
-// just that one file onto the container's ~/.claude/.credentials.json. The
-// user's ~/.claude is never written to.
+//   - `akf auth` (or the auto-prompt on `akf up`) runs a one-time interactive
+//     `claude` login ON THE HOST with CLAUDE_CONFIG_DIR pointed at akf's state
+//     dir. Login writes `.credentials.json` into that dir (even on macOS —
+//     only subsequent refreshes go Keychain-only). Host-side because the
+//     OAuth paste flow is unreliable through the container TTY.
+//   - `akf up` overlay-mounts that file RW into every sandbox. The Linux
+//     claude inside reads and rotates it in place, so the lineage
+//     self-maintains: short-lived access tokens, rotating refresh token.
+//   - The host's own login is never read or touched again.
 
 import { join } from "@std/path";
-import { realRunner, type Runner } from "./container.ts";
 
-// Keychain service name Claude Code stores its credential under (generic
-// password, account = the macOS username).
-export const KEYCHAIN_SERVICE = "Claude Code-credentials";
-
-export interface StageOptions {
-  home: string;
-  // Test seams.
-  os?: string;
-  run?: Runner;
+// CLAUDE_CONFIG_DIR for the akf-owned login. Lives under XDG state, not
+// ~/.claude*, so host `claude` never picks it up by accident.
+export function akfProfileDir(home: string): string {
+  return join(home, ".local", "state", "apfelkaefig", "claude");
 }
 
-// Read the live Claude credential from the macOS Keychain and write it to
-// $HOME/.cache/apfelkaefig/claude-credentials.json (mode 600), returning that
-// path. Returns null on non-macOS, when no Keychain item exists, or when the
-// item isn't valid JSON — callers then fall back to whatever ~/.claude carries.
-export async function stageClaudeCredentials(opts: StageOptions): Promise<string | null> {
-  const os = opts.os ?? Deno.build.os;
-  if (os !== "darwin") return null;
-  const run = opts.run ?? realRunner;
+export function akfCredentialsFile(home: string): string {
+  return join(akfProfileDir(home), ".credentials.json");
+}
 
-  const r = await run(
-    "security",
-    ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
-    { stdout: "piped", stderr: "null" },
-  );
-  if (r.code !== 0) return null;
-  const cred = r.stdout.trim();
-  if (!cred) return null;
+export type CredentialCheck =
+  | { state: "missing" }
+  // Exists but unparseable or not the expected shape — treat like missing.
+  | { state: "invalid" }
+  | { state: "valid"; path: string; expiresAt: number }
+  // Access token expired (or about to); the refresh token may still revive it.
+  | { state: "expired"; path: string; refreshToken: string };
+
+// Consider a token "expired" slightly early so a sandbox doesn't start with a
+// token that dies moments later.
+const EXPIRY_MARGIN_MS = 5 * 60 * 1000;
+
+export async function checkCredentials(
+  home: string,
+  now: number = Date.now(),
+): Promise<CredentialCheck> {
+  const path = akfCredentialsFile(home);
+  let raw: string;
   try {
-    JSON.parse(cred); // Guard against mounting a non-JSON blob over the token.
+    raw = await Deno.readTextFile(path);
   } catch {
-    return null;
+    return { state: "missing" };
+  }
+  try {
+    const oauth = JSON.parse(raw)?.claudeAiOauth;
+    if (
+      typeof oauth?.accessToken !== "string" || typeof oauth?.refreshToken !== "string" ||
+      typeof oauth?.expiresAt !== "number"
+    ) return { state: "invalid" };
+    if (oauth.expiresAt <= now + EXPIRY_MARGIN_MS) {
+      return { state: "expired", path, refreshToken: oauth.refreshToken };
+    }
+    return { state: "valid", path, expiresAt: oauth.expiresAt };
+  } catch {
+    return { state: "invalid" };
+  }
+}
+
+// Claude Code's public OAuth client id — it appears in every login URL the CLI
+// prints. Needed for the standard refresh_token grant below.
+const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+
+// Candidate token endpoints, tried in order. Anthropic has been migrating
+// console.anthropic.com → platform.claude.com; whichever answers definitively
+// (2xx, or an auth-style 4xx) wins. Anything else falls through.
+const TOKEN_ENDPOINTS = [
+  "https://platform.claude.com/v1/oauth/token",
+  "https://console.anthropic.com/v1/oauth/token",
+];
+
+export type RefreshResult = "refreshed" | "auth-needed" | "unavailable";
+
+// Best-effort host-side refresh of an expired credential, writing the rotated
+// tokens back to `path` (the same file sandboxes mount, so the lineage stays
+// single-source). "auth-needed" = the server rejected the refresh token (dead
+// family → a new login is required). "unavailable" = couldn't get a definitive
+// answer (offline, endpoint moved) — callers proceed and let the sandbox's own
+// claude retry.
+//
+// Only call this when no sandbox is running: a live box holds the current
+// refresh token in memory, and rotating it from the host would trigger the
+// same reuse-revocation this module exists to prevent.
+export async function refreshCredentials(
+  path: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<RefreshResult> {
+  let stored: Record<string, unknown>;
+  let oauth: Record<string, unknown>;
+  try {
+    stored = JSON.parse(await Deno.readTextFile(path));
+    oauth = stored.claudeAiOauth as Record<string, unknown>;
+    if (typeof oauth?.refreshToken !== "string") return "auth-needed";
+  } catch {
+    return "auth-needed";
   }
 
-  const dir = join(opts.home, ".cache", "apfelkaefig");
+  for (const endpoint of TOKEN_ENDPOINTS) {
+    let res: Response;
+    try {
+      res = await fetchFn(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "refresh_token",
+          refresh_token: oauth.refreshToken,
+          client_id: CLIENT_ID,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      continue; // network error — try the next endpoint
+    }
+    if (res.ok) {
+      const body = await res.json();
+      if (typeof body?.access_token !== "string") return "unavailable";
+      stored.claudeAiOauth = {
+        ...oauth,
+        accessToken: body.access_token,
+        refreshToken: typeof body.refresh_token === "string"
+          ? body.refresh_token
+          : oauth.refreshToken,
+        expiresAt: Date.now() + (typeof body.expires_in === "number" ? body.expires_in : 3600) *
+            1000,
+      };
+      await Deno.writeFile(
+        path,
+        new TextEncoder().encode(JSON.stringify(stored)),
+        { mode: 0o600 },
+      );
+      return "refreshed";
+    }
+    await res.body?.cancel();
+    // Definitive auth failures mean the refresh token is dead. A 404/5xx means
+    // this endpoint isn't it — try the next.
+    if (res.status === 400 || res.status === 401 || res.status === 403) return "auth-needed";
+  }
+  return "unavailable";
+}
+
+// Run the interactive Claude login on the host, scoped to the akf profile dir.
+// Returns true when a usable credential materialized. The wizard is `claude`
+// itself: with no credential in CLAUDE_CONFIG_DIR it opens the login flow
+// (browser + paste work natively on the host, unlike through the container
+// TTY). After login it drops into the REPL — the user exits to continue.
+export async function runAuthWizard(home: string): Promise<boolean> {
+  const dir = akfProfileDir(home);
   await Deno.mkdir(dir, { recursive: true });
-  const path = join(dir, "claude-credentials.json");
-  await Deno.writeFile(path, new TextEncoder().encode(cred), { mode: 0o600 });
-  return path;
+  console.error(
+    `akf auth: opening Claude login for the sandbox profile (${dir}).\n` +
+      `          Complete the login in the browser; once you land in the Claude\n` +
+      `          prompt, exit it (type /exit or press Ctrl+C twice) to continue.`,
+  );
+  let status: Deno.CommandStatus;
+  try {
+    const child = new Deno.Command("claude", {
+      env: { ...Deno.env.toObject(), CLAUDE_CONFIG_DIR: dir },
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    }).spawn();
+    status = await child.status;
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      console.error("akf auth: `claude` not found on PATH — install Claude Code first.");
+      return false;
+    }
+    throw err;
+  }
+  // Exit code is unreliable (Ctrl+C out of the REPL is normal) — what matters
+  // is whether a parseable credential landed.
+  const check = await checkCredentials(home);
+  if (check.state === "valid" || check.state === "expired") return true;
+  if (status.code !== 0) return false;
+  return false;
 }
