@@ -9,6 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep fd-find tree vim unzip xz-utils tmux \
     && rm -rf /var/lib/apt/lists/*
 
+# Without a UTF-8 locale tmux falls back to POSIX and renders every non-ASCII
+# glyph as '_' (Claude Code's spinner, bullets, banner). C.UTF-8 ships with
+# glibc, so no locales package needed.
+ENV LANG=C.UTF-8
+
 # GitHub CLI
 RUN ARCH=$(dpkg --print-architecture) && \
     curl -fsSL "https://github.com/cli/cli/releases/latest/download/gh_$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r '.tag_name' | sed 's/^v//')_linux_${ARCH}.tar.gz" \
@@ -32,8 +37,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
     curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
     | tar -xJ --strip-components=1 -C /usr/local
 
-# Non-root user
-RUN useradd -m -s /bin/bash node
+# Non-root user. focus-events lets terminal apps (Claude Code) track pane
+# focus through tmux instead of nagging about it in the status area.
+RUN useradd -m -s /bin/bash node && \
+    echo 'set -g focus-events on' > /home/node/.tmux.conf && \
+    chown node:node /home/node/.tmux.conf
 
 # Install Claude Code as the node user so its self-update path works. Pinned
 # so bumping the version busts the Docker layer cache (an unpinned `| bash`
