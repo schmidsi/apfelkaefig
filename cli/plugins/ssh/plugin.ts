@@ -364,12 +364,17 @@ function renderDockerfile(): string {
     `# PAM stack needed). The entrypoint unlocks '${NODE_USER}' (\`passwd -d\`) because`,
     `# with UsePAM no, sshd runs its own locked-account check and refuses any`,
     `# account whose shadow password is '!' (the default for a passwordless user).`,
+    `# AcceptEnv: terminals send TERM_PROGRAM et al via SendEnv (Ghostty's ssh-env`,
+    `# integration does by default), but sshd drops anything not accepted here —`,
+    `# and without TERM_PROGRAM, Claude Code in the box won't emit OSC 8`,
+    `# hyperlinks, so links print as plain text and wrap unclickably.`,
     `RUN printf '%s\\n' \\`,
     `    'PasswordAuthentication no' \\`,
     `    'PermitRootLogin no' \\`,
     `    'UsePAM no' \\`,
     `    'AuthorizedKeysFile /home/${NODE_USER}/.ssh/authorized_keys' \\`,
     `    'HostKey ${HOST_KEY}' \\`,
+    `    'AcceptEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION' \\`,
     `    > /etc/ssh/sshd_config.d/akf.conf`,
     ``,
     `# Entrypoint (the command \`akf up --serve\` runs): ensure the host key exists`,
@@ -440,6 +445,12 @@ host key persists across runs so reconnects don't trip \`known_hosts\`.
 - **"chmod socket: invalid argument"** (in \`~/.claude/remote/run/<id>/remote-server.log\`)
   — \`~/.claude/remote\` landed on virtiofs (the host mount), which rejects chmod on
   socket inodes. A native named volume shadows that subdir to fix it.
+- **Links print but aren't clickable** (Ghostty et al.) — Claude Code only emits
+  OSC 8 hyperlinks when it detects a capable terminal via \`TERM_PROGRAM\`, and sshd
+  drops that env unless accepted. The akf sshd config has \`AcceptEnv COLORTERM
+  TERM_PROGRAM TERM_PROGRAM_VERSION\` (needs \`--rebuild\` to land); Ghostty forwards
+  them when \`shell-integration-features\` includes \`ssh-env\` (on by default). For a
+  client that forwards nothing, \`FORCE_HYPERLINK=1 claude\` forces emission.
 
 Diagnose from the host with \`container logs <container>\` — the container name
 is printed in the \`akf up --serve\` banner — and, inside the box,

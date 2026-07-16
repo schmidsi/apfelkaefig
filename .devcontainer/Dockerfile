@@ -37,12 +37,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
 # PAM stack needed). The entrypoint unlocks 'node' (`passwd -d`) because
 # with UsePAM no, sshd runs its own locked-account check and refuses any
 # account whose shadow password is '!' (the default for a passwordless user).
+# AcceptEnv: terminals send TERM_PROGRAM et al via SendEnv (Ghostty's ssh-env
+# integration does by default), but sshd drops anything not accepted here —
+# and without TERM_PROGRAM, Claude Code in the box won't emit OSC 8
+# hyperlinks, so links print as plain text and wrap unclickably.
 RUN printf '%s\n' \
     'PasswordAuthentication no' \
     'PermitRootLogin no' \
     'UsePAM no' \
     'AuthorizedKeysFile /home/node/.ssh/authorized_keys' \
     'HostKey /var/lib/akf-ssh/ssh_host_ed25519_key' \
+    'AcceptEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION' \
     > /etc/ssh/sshd_config.d/akf.conf
 
 # Entrypoint (the command `akf up --serve` runs): ensure the host key exists

@@ -95,6 +95,12 @@ Deno.test("ssh dockerfileBlocks: installs sshd and the foreground entrypoint", (
     b.contents.includes("chown node:node /home/node/.claude/remote"),
     "remote volume not chowned to node",
   );
+  // Terminals SendEnv these so agents in the box detect hyperlink support
+  // (OSC 8 clickable links); sshd drops them without AcceptEnv.
+  assert(
+    b.contents.includes("AcceptEnv COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION"),
+    "terminal-identity env not accepted by sshd",
+  );
 });
 
 Deno.test("ssh resolveKeyPath: resolves ${localWorkspaceFolder}", () => {
