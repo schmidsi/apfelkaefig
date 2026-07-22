@@ -6,7 +6,7 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl sudo ca-certificates jq \
-    ripgrep fd-find tree vim unzip xz-utils tmux \
+    ripgrep fd-find tree vim unzip xz-utils tmux age \
     && rm -rf /var/lib/apt/lists/*
 
 # Without a UTF-8 locale tmux falls back to POSIX and renders every non-ASCII
