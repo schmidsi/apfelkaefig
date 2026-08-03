@@ -51,6 +51,11 @@ export interface RunOverrides {
   // all wrapCommand hooks (replacement beats wrapping — e.g. --serve's sshd
   // must not be tmux-wrapped).
   command?: string[];
+  // Override the image ENTRYPOINT (`--entrypoint`). `akf up --serve` sets this
+  // so the sshd entrypoint runs directly as root: a base image whose own
+  // entrypoint drops privileges (e.g. `runuser -u node`) would otherwise defeat
+  // the `user: "root"` override and the sshd bootstrap fails on `mkdir /run/sshd`.
+  entrypoint?: string;
   // Run as this user (`-u`).
   user?: string;
   // Force TTY allocation on/off.

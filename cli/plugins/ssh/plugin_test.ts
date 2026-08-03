@@ -215,7 +215,8 @@ Deno.test("ssh preRun: serve clears the orphan and returns run overrides", async
     const result = await sshPlugin.preRun!(c);
     assert(result.action === "continue", `expected continue, got ${result.action}`);
     assertEquals(result.overrides, {
-      command: ["/usr/local/bin/akf-sshd"],
+      entrypoint: "/usr/local/bin/akf-sshd",
+      command: [],
       user: "root",
       tty: false,
       stopByNameOnInterrupt: true,

@@ -65,6 +65,10 @@ export interface RunFlagsInput {
   // Replace the resolved config's command with a fixed argv. Used by
   // `akf up --serve` to run the sshd entrypoint instead of the agent.
   commandOverride?: string[];
+  // Override the image ENTRYPOINT (`--entrypoint`). `akf up --serve` sets this
+  // to run the sshd entrypoint directly, bypassing a base-image entrypoint that
+  // would otherwise drop root to the agent user and break the sshd bootstrap.
+  entrypointOverride?: string;
   // Replace the resolved config's user (`-u`). `akf up --serve` runs as root so
   // sshd can bind :22 and authenticate the login as the agent user.
   userOverride?: string;
@@ -179,6 +183,12 @@ export function buildRunArgs(
   }
 
   args.push("-u", input.userOverride ?? e.user, "-w", sub(e.workspaceFolder));
+  // `--entrypoint` must precede the image ref. Set by `akf up --serve` so the
+  // sshd entrypoint runs directly instead of through a base-image entrypoint
+  // that drops privileges (which would defeat `-u root`).
+  if (input.entrypointOverride !== undefined) {
+    args.push("--entrypoint", input.entrypointOverride);
+  }
   args.push(input.imageRef);
   // commandOverride replaces the resolved config's command — used by
   // `akf up --serve` (sshd entrypoint) and by run-hook plugins that wrap the

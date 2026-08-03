@@ -124,6 +124,22 @@ Deno.test("buildRunArgs: commandOverride and userOverride replace command and us
   assert(out.args.includes("-i") && !out.args.includes("-it"), "expected -i without -it");
 });
 
+Deno.test("buildRunArgs: entrypointOverride emits --entrypoint before the image", () => {
+  const out = buildRunArgs({
+    resolved: resolved({ command: ["claude"] }),
+    workspaceHostPath: "/Users/me/proj",
+    imageRef: "img",
+    homeDir: "/nonexistent",
+    entrypointOverride: "/usr/local/bin/akf-sshd",
+    commandOverride: [],
+    userOverride: "root",
+    tty: false,
+  });
+  // --entrypoint must come immediately before the image ref, with no command
+  // args after it (the entrypoint takes none).
+  assertEquals(out.args.slice(-3), ["--entrypoint", "/usr/local/bin/akf-sshd", "img"]);
+});
+
 Deno.test("buildExecArgs: runs a command over container exec via a shell with explicit PATH", () => {
   const args = buildExecArgs(
     "akf-proj",

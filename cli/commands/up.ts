@@ -382,6 +382,7 @@ export async function runUp(opts: UpOptions): Promise<number> {
     imageRef: image.ref,
     extraEnv,
     commandOverride,
+    entrypointOverride: overrides?.entrypoint,
     userOverride: overrides?.user,
     tty: overrides?.tty,
     name: sandboxName,

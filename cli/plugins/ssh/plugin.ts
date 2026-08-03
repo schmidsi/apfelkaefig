@@ -237,7 +237,12 @@ export const sshPlugin: BuiltInPlugin = {
     return {
       action: "continue",
       overrides: {
-        command: [ENTRYPOINT],
+        // Override the ENTRYPOINT (not just the command) so sshd runs directly
+        // as root. A base image whose own entrypoint drops privileges (e.g. a
+        // custom Dockerfile ending `runuser -u node -- "$@"`) would otherwise
+        // run the sshd bootstrap as the agent user and fail on `mkdir /run/sshd`.
+        entrypoint: ENTRYPOINT,
+        command: [],
         // Root so sshd can bind :22 and authenticate the login as the agent
         // user; non-TTY so stdout/stderr stream as logs.
         user: "root",
