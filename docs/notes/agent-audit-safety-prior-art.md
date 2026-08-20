@@ -153,6 +153,29 @@ auto-rollback + investigating supervisor. Per component:
    state making schema changes replayable and rollback atomic. This belongs in
    agent-orchestrator territory, not akf.
 
+## Fork or contribute to Centaur? (assessed 2026-08-20)
+
+**No fork, no build-on; tactical contributions at most.** From reading the repo:
+
+- **Stack mismatch:** Rust control plane (`services/api-rs`) + Python + Postgres, deployed on
+  Kubernetes (k3s minimum), per-conversation sandboxes under default-deny NetworkPolicies.
+  Forking = operating their platform. Against akf's scope (Deno, Apple `container`, one Mac),
+  that's adoption cost, not acceleration.
+- **Inverted logging philosophy (decisive):** `iron-proxy` is a *pinned upstream image* wrapped
+  by a Dockerfile/entrypoint/yaml — not separable code — and its logging contract **mandates
+  redaction** (JSON logs must exclude request headers, credential values, upstream response
+  bodies). Their threat model minimizes logs as a leak surface; ours treats the full log as the
+  product. "Record everything" is a design inversion, not a contribution.
+- **Health:** ~1.2k stars, 211 forks, 883 commits, active; org-driven toward "one shared team
+  agent." Apache-2.0 per announcement (verify in-repo before vendoring anything).
+
+**Do instead:** steal patterns (placeholder-credential swap, `docs/pages/security.mdx` threat
+model, unmanaged-mode config seeding); contribute a small fix/doc PR while studying it if the
+occasion arises; design the akf recorder's trace format for interop (OTel ingest) so
+Centaur-style deployments become potential consumers. Their deliberate non-recording of content
+is exactly our opening — same rhyme as Docker Sandboxes vs. Apple `container` in
+`positioning.md`.
+
 ## Corrections to the design note
 
 - "Centaur" (heard in the voice memo) = **Paradigm's Centaur**, not Sentry.
