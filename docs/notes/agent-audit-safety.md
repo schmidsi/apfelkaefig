@@ -8,6 +8,10 @@ Three layers fell out of the dump, ordered by build sequence: **record** everyth
 what crosses the boundary, **govern** how systems change. Plus a threat model that motivates all
 three.
 
+> Prior-art scan for all three layers: [`agent-audit-safety-prior-art.md`](agent-audit-safety-prior-art.md)
+> (2026-08-20). Short version: every ingredient exists, no product composes any layer completely,
+> and layers 1+2 should probably be one component (the boundary filter *is* the recorder).
+
 ## Threat model
 
 The worst cases for agentic systems — especially prompt-injected or otherwise rogue LLMs — in
